@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Secure CSP Policy -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://sdk.minepi.com;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https:;
+        connect-src 'self' https://api.mainnet.minepi.com;
+        font-src 'self';
+        frame-src 'none';
+        object-src 'none';
+    ">
+    
+    <title>Balloon Pop Game</title>
+    <style>
+        body { 
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Game Container -->
+    <div id="game-container"></div>
+
+    <!-- External Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+
+    <!-- Inline Script with Nonce (Allowed by CSP) -->
+    <script type="module" nonce="2726c7f26c98">
+        import { MainMenu } from '/js/scenes/MainMenu.js';
+        import { Market } from '/js/scenes/Market.js';
+        import { PlayGame } from '/js/scenes/PlayGame.js';
+
+        const config = {
+            type: Phaser.AUTO,
+            parent: 'game-container',
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: '#222',
+            scene: [MainMenu, Market, PlayGame],
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false
+                }
+            },
+            scale: {
+                mode: Phaser.Scale.RESIZE
+            }
+        };
+
+        new Phaser.Game(config);
+    </script>
+</body>
+</html>

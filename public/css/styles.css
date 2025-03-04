@@ -1,0 +1,33 @@
+/* Reset default browser styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Full-screen game container */
+#game-container {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Phaser canvas styling */
+canvas {
+    display: block;
+    margin: 0 auto;
+}
+
+/* Text styling for Phaser (matches your game) */
+.game-text {
+    font-family: Arial, sans-serif;
+    font-size: 20px;
+    fill: #ffffff;
+    user-select: none;
+}
+
+/* Button hover effects */
+.text-button:hover {
+    opacity: 0.8;
+    cursor: pointer;
+}
