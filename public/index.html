@@ -3,43 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Full CSP Policy -->
     <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://sdk.minepi.com;
-    style-src 'self' 'unsafe-inline';
-    img-src 'self' data: blob: https:;
-    connect-src 'self' 
-        https://api.sandbox.minepi.com  <!-- Sandbox API -->
-        https://socialchain.app         <!-- Pi social features -->
-        https://api.socialchain.app;   <!-- SocialChain API -->
-    font-src 'self';
-    frame-src 'none';
-    object-src 'none';
-">
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 
+            https://cdn.jsdelivr.net 
+            https://sdk.minepi.com 
+            https://app-cdn.minepi.com;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https:;
+        connect-src 'self'
+            https://api.sandbox.minepi.com
+            https://socialchain.app
+            https://api.socialchain.app
+            https://app-cdn.minepi.com;
+        frame-src 'none';
+        object-src 'none';
+    ">
+    <title>Balloon Pop Game</title>
     <script src="https://sdk.minepi.com/pi-sdk.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
             try {
+                if(typeof Pi === 'undefined') {
+                    throw new Error('Pi SDK failed to load');
+                }
+                
                 await Pi.init({
                     version: '2.0',
-                    sandbox: true // false for production
+                    sandbox: true,
+                    // Explicitly disable AdsV2
+                    enableAds: false 
                 });
-                console.log('Pi SDK initialized');
+                
+                // Validate SDK features
+                if(!Pi.ads || !Pi.ads.setAdConfiguration) {
+                    console.warn('AdsV2 not available, using fallback');
+                }
+                
             } catch (error) {
-                console.error('Pi init failed:', error);
+                console.error('Pi SDK initialization failed:', error);
+                // Implement fallback logic here
             }
         });
     </script>
     <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
+        /* Full CSS */
+        body { 
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        canvas {
+            display: block;
+            image-rendering: crisp-edges;
+        }
     </style>
 </head>
 <body>
+    <!-- Full Game Container -->
     <div id="game-container"></div>
-    
+
+    <!-- Phaser 3.55.2 -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
 
+    <!-- Game Initialization -->
     <script type="module">
         import { MainMenu } from '/js/scenes/MainMenu.js';
         import { Market } from '/js/scenes/Market.js';
@@ -54,10 +90,37 @@
             scene: [MainMenu, Market, PlayGame],
             physics: {
                 default: 'arcade',
-                arcade: { gravity: { y: 0 }, debug: false }
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false,
+                    checkCollision: {
+                        up: true,
+                        down: true,
+                        left: true,
+                        right: true
+                    }
+                }
+            },
+            scale: {
+                mode: Phaser.Scale.RESIZE,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            },
+            render: {
+                pixelArt: false,
+                antialias: false,
+                roundPixels: true
             }
         };
-        new Phaser.Game(config);
+
+        try {
+            new Phaser.Game(config);
+        } catch (error) {
+            console.error('Phaser initialization failed:', error);
+            document.body.innerHTML = `
+                <h1 style="color:red">Game Failed to Load</h1>
+                <p>${error.message}</p>
+            `;
+        }
     </script>
 </body>
 </html>
