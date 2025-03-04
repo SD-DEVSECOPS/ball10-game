@@ -1,51 +1,82 @@
 export class PiService {
-    static piSDKAvailable = false;
     static isInitialized = false;
 
     static async initialize() {
-        if (typeof Pi === 'undefined') {
-            console.error('Pi SDK not loaded');
-            return;
-        }
+        if (this.isInitialized) return true;
+        if (typeof Pi === 'undefined') return false;
 
         try {
-            await Pi.init({
-                version: '2.0',
-                sandbox: true // Set to false for production
-            });
-            this.piSDKAvailable = true;
+            await Pi.init({ version: '2.0', sandbox: true });
             this.isInitialized = true;
-            console.log('Pi SDK initialized successfully');
+            return true;
         } catch (error) {
-            console.error('Pi SDK initialization failed:', error);
-            this.piSDKAvailable = false;
+            console.error('Pi initialization failed:', error);
+            return false;
         }
     }
 
     static async authenticate() {
-        if (!this.isInitialized) {
-            throw new Error('Pi SDK not initialized. Call initialize() first.');
-        }
-
+        if (!this.isInitialized) throw new Error('Pi SDK not initialized');
+        
         return new Promise((resolve, reject) => {
-            Pi.authenticate(['username', 'payments', 'wallet_address'], (authResult) => {
-                authResult ? resolve(authResult) : reject('User cancelled authentication');
+            Pi.authenticate(['username', 'payments', 'wallet_address'], authResult => {
+                if (authResult) resolve(authResult);
+                else reject(new Error('Authentication cancelled'));
             });
         });
     }
 
-    static async initiatePayment(paymentData) {
-        if (!this.isInitialized) {
-            throw new Error('Pi SDK not initialized. Call initialize() first.');
-        }
+    static async createPayment(amount, memo) {
+        if (!this.isInitialized) throw new Error('Pi SDK not initialized');
+
+        const paymentData = {
+            amount: amount,
+            memo: memo,
+            metadata: { 
+                productId: "balloon_points", 
+                gameVersion: "1.0.0" 
+            }
+        };
 
         return new Promise((resolve, reject) => {
             Pi.createPayment(paymentData, {
-                onReadyForServerApproval: resolve,
-                onReadyForServerCompletion: resolve,
+                onReadyForServerApproval: paymentId => {
+                    // Send to your backend
+                    this.approvePaymentOnServer(paymentId).then(resolve).catch(reject);
+                },
+                onReadyForServerCompletion: txid => {
+                    // Verify on your backend
+                    this.completePaymentOnServer(txid).then(resolve).catch(reject);
+                },
                 onCancel: () => reject('Payment cancelled'),
-                onError: reject
+                onError: error => reject(error)
             });
         });
+    }
+
+    static async approvePaymentOnServer(paymentId) {
+        // Implement server-side approval
+        const response = await fetch('/api/approve-payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Pi.api.getAPISecret()}`
+            },
+            body: JSON.stringify({ paymentId })
+        });
+        return response.json();
+    }
+
+    static async completePaymentOnServer(txid) {
+        // Implement server-side completion
+        const response = await fetch('/api/complete-payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Pi.api.getAPISecret()}`
+            },
+            body: JSON.stringify({ txid })
+        });
+        return response.json();
     }
 }
