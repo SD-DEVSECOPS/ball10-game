@@ -16,7 +16,23 @@
         object-src 'none';
     ">
     
-    <title>Balloon Pop Game</title>
+    <!-- Pi SDK Initialization -->
+    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await Pi.init({
+                    version: '2.0',
+                    sandbox: true // Set to false in production
+                });
+                console.log('Pi SDK initialized successfully');
+            } catch (error) {
+                console.error('Pi SDK initialization failed:', error);
+            }
+        });
+    </script>
+    
+    <title>Ball10 Game</title>
     <style>
         body { 
             margin: 0;
@@ -31,11 +47,10 @@
     <!-- Game Container -->
     <div id="game-container"></div>
 
-    <!-- External Dependencies -->
+    <!-- Phaser 3 -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
 
-    <!-- Inline Script with Nonce (Allowed by CSP) -->
+    <!-- Game Initialization -->
     <script type="module" nonce="2726c7f26c98">
         import { MainMenu } from '/js/scenes/MainMenu.js';
         import { Market } from '/js/scenes/Market.js';

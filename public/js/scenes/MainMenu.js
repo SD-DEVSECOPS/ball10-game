@@ -53,4 +53,18 @@ export class MainMenu extends Phaser.Scene {
     .setInteractive({ useHandCursor: true })
     .on('pointerdown', callback);
   }
+  
+   async handlePiLogin() {
+        try {
+            // Initialize Pi SDK before authentication
+            await PiService.initialize();
+            const authResult = await PiService.authenticate();
+            this.gameState.piUser = authResult.user;
+            console.log('Authenticated as:', authResult.user.username);
+            this.scene.restart(); // Refresh UI
+        } catch (error) {
+            console.error('Pi Login Error:', error);
+            // Add error message display logic here
+            }
+}
 }
