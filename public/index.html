@@ -4,13 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://sdk.minepi.com;
-        style-src 'self' 'unsafe-inline';
-        img-src 'self' data: blob: https:;
-        connect-src 'self' https://api.mainnet.minepi.com;
-    ">
-    <title>Balloon Pop Game</title>
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://sdk.minepi.com;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: blob: https:;
+    connect-src 'self' 
+        https://api.sandbox.minepi.com  <!-- Sandbox API -->
+        https://socialchain.app         <!-- Pi social features -->
+        https://api.socialchain.app;   <!-- SocialChain API -->
+    font-src 'self';
+    frame-src 'none';
+    object-src 'none';
+">
     <script src="https://sdk.minepi.com/pi-sdk.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
