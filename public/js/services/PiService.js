@@ -1,6 +1,7 @@
 export class PiService {
     static isSandbox = true; // Set to false for production
     static isInitialized = false;
+    static backendUrl = 'https://your-backend.com'; // Replace with your backend URL
 
     static async initialize() {
         if (this.isInitialized) return true;
@@ -28,7 +29,6 @@ export class PiService {
                     }
                 },
                 features: ['PAYMENTS', 'AUTHENTICATION']
-                // Removed enableAds: false
             }).then(() => {
                 this.isInitialized = true;
                 console.log('Pi SDK initialized successfully');
@@ -77,19 +77,14 @@ export class PiService {
     }
 
     static async verifyAccessToken(accessToken) {
-        const apiUrl = this.isSandbox 
-            ? 'https://api.sandbox.minepi.com/v2/me' 
-            : 'https://api.minepi.com/v2/me';
-
         try {
-            const response = await fetch(apiUrl, {
-                method: 'GET',
+            const response = await fetch(`${this.backendUrl}/api/verify-token`, {
+                method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                mode: 'cors' // Ensure CORS mode is enabled
+                body: JSON.stringify({ accessToken })
             });
 
             if (!response.ok) {
@@ -102,6 +97,97 @@ export class PiService {
             return userData;
         } catch (error) {
             console.error('Token verification error:', error);
+            throw error;
+        }
+    }
+
+    static async createPayment(amount, memo) {
+        if (!this.isInitialized) {
+            throw new Error('Pi SDK not initialized. Call initialize() first.');
+        }
+
+        return new Promise((resolve, reject) => {
+            Pi.createPayment({
+                amount: amount,
+                memo: memo,
+                metadata: {
+                    productId: "balloon_points",
+                    environment: this.isSandbox ? "sandbox" : "production"
+                },
+                paymentOptions: {
+                    requireCompletion: true
+                }
+            }, {
+                onReadyForServerApproval: (paymentId) => {
+                    console.log('Payment ready for server approval. Payment ID:', paymentId);
+                    this.approvePayment(paymentId)
+                        .then(() => resolve({ paymentId, status: 'pending' }))
+                        .catch((error) => reject(error));
+                },
+                onReadyForServerCompletion: (paymentId, txid) => {
+                    console.log('Payment ready for server completion. Payment ID:', paymentId, 'TXID:', txid);
+                    this.completePayment(paymentId, txid)
+                        .then(() => resolve({ paymentId, txid, status: 'completed' }))
+                        .catch((error) => reject(error));
+                },
+                onCancel: (paymentId) => {
+                    console.warn('Payment cancelled. Payment ID:', paymentId);
+                    reject(new Error(`Payment ${paymentId} cancelled by user`));
+                },
+                onError: (error, payment) => {
+                    console.error('Payment error:', error, 'Payment:', payment);
+                    reject(new Error(`Payment error: ${error.message}`));
+                }
+            });
+        });
+    }
+
+    static async approvePayment(paymentId) {
+        try {
+            const response = await fetch(`${this.backendUrl}/api/approve-payment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ paymentId })
+            });
+
+            if (!response.ok) {
+                console.error('Payment approval failed. Response:', await response.text());
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Payment approved:', result);
+            return result;
+        } catch (error) {
+            console.error('Payment approval error:', error);
+            throw error;
+        }
+    }
+
+    static async completePayment(paymentId, txid) {
+        try {
+            const response = await fetch(`${this.backendUrl}/api/complete-payment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ paymentId, txid })
+            });
+
+            if (!response.ok) {
+                console.error('Payment completion failed. Response:', await response.text());
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Payment completed:', result);
+            return result;
+        } catch (error) {
+            console.error('Payment completion error:', error);
             throw error;
         }
     }
