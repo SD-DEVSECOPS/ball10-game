@@ -4,6 +4,9 @@ const axios = require('axios');
 
 const app = express();
 
+// Serve static files from the /public directory
+app.use(express.static('public'));
+
 // Enable CORS for your frontend domain
 app.use(cors({
     origin: 'https://ball10-game.vercel.app', // Replace with your frontend domain
