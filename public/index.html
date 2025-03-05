@@ -4,138 +4,170 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- Full CSP Policy -->
+    <!-- Enhanced CSP Policy -->
     <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
+        default-src 'none';
         script-src 'self' 'unsafe-inline' 
             https://cdn.jsdelivr.net 
             https://sdk.minepi.com 
-            https://app-cdn.minepi.com;
-        style-src 'self' 'unsafe-inline';
+            https://app-cdn.minepi.com
+            https://cdnjs.cloudflare.com;
+        style-src 'self' 'unsafe-inline' 
+            https://cdn.jsdelivr.net;
         img-src 'self' data: blob: https:;
         connect-src 'self'
+            https://api.minepi.com
             https://api.sandbox.minepi.com
             https://socialchain.app
             https://api.socialchain.app
             https://ball10-game.vercel.app;
         frame-src 'self' 
-            https://sandbox.minepi.com;
+            https://sandbox.minepi.com
+            https://minepi.com;
         child-src 'self' 
             https://sandbox.minepi.com;
-        font-src 'self';
+        font-src 'self' 
+            https://cdn.jsdelivr.net;
+        manifest-src 'self';
+        base-uri 'self';
+        form-action 'none';
         object-src 'none';
     ">
 
-    <!-- Pi SDK Initialization -->
-    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', async () => {
+    <!-- Pi SDK with fallback -->
+    <script src="https://sdk.minepi.com/pi-sdk.js" 
+            integrity="sha384-... (get from Pi docs)"
+            crossorigin="anonymous"
+            onerror="handlePiSDKError()">
+    </script>
+
+    <title>Balloon Pop Game</title>
+    <style>
+        /* Critical CSS */
+        body { 
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        .error-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            color: #fff;
+            padding: 2rem;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div class="error-overlay" id="error-display">
+            <h2>⚠️ Initialization Error</h2>
+            <p id="error-message"></p>
+            <button onclick="location.reload()">Retry</button>
+        </div>
+    </div>
+
+    <!-- Phaser with SRI -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js" 
+            integrity="sha384-7tKUEA0F4wSqH2+8QJRFrAXSo+DlvyW+Z7XqSqK99BPYKyn87lZ0VsgAXZn1kWP" 
+            crossorigin="anonymous">
+    </script>
+
+    <script type="module">
+        // Error handling first
+        const showError = (message) => {
+            const overlay = document.getElementById('error-display');
+            document.getElementById('error-message').textContent = message;
+            overlay.style.display = 'flex';
+            console.error(message);
+        };
+
+        // Dynamic scene loader
+        const loadScene = async (sceneName) => {
             try {
-                // Full initialization with origin validation
-                await Pi.init({
+                return await import(`./js/scenes/${sceneName}.js`);
+            } catch (error) {
+                showError(`Failed to load ${sceneName}: ${error.message}`);
+                throw error;
+            }
+        };
+
+        // Initialize Pi SDK
+        const initializePi = async () => {
+            if (!window.Pi) {
+                throw new Error('Pi SDK failed to load');
+            }
+
+            try {
+                await window.Pi.init({
                     version: '2.0',
                     sandbox: true,
                     origins: [
                         'https://ball10-game.vercel.app',
                         'https://sandbox.minepi.com'
                     ],
-                    communication: {
-                        postMessage: {
-                            allowedOrigins: [
-                                'https://sandbox.minepi.com',
-                                'https://ball10-game.vercel.app'
-                            ],
-                            validateOrigin: true
-                        }
-                    },
-                    features: ['PAYMENTS', 'AUTHENTICATION'],
-                
-                });
-
-                // Message handler for cross-origin communication
-                window.addEventListener('message', (event) => {
-                    // Origin validation
-                    const allowedOrigins = [
-                        'https://sandbox.minepi.com',
-                        'https://ball10-game.vercel.app'
-                    ];
-                    
-                    if (!allowedOrigins.includes(event.origin)) return;
-                    
-                    // Handle Pi messages
-                    if (event.data.type === 'pi-auth') {
-                        console.log('Auth message:', event.data);
+                    featureFlags: {
+                        payments: true,
+                        authentication: true
                     }
                 });
-
+                return window.Pi;
             } catch (error) {
-                console.error('Pi initialization failed:', error);
-                document.getElementById('game-container').innerHTML = `
-                    <div style="color:red; padding:20px; text-align:center;">
-                        <h2>Pi Network Error</h2>
-                        <p>${error.message}</p>
-                    </div>
-                `;
-            }
-        });
-    </script>
-
-    <title>Balloon Pop Game</title>
-    <style>
-        body { 
-            margin: 0;
-            overflow: hidden;
-            background-color: #1a1a1a;
-        }
-        #game-container {
-            width: 100vw;
-            height: 100vh;
-        }
-        canvas {
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    <div id="game-container"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-
-    <script type="module">
-        import { MainMenu } from '/js/scenes/MainMenu.js';
-        import { Market } from '/js/scenes/Market.js';
-        import { PlayGame } from '/js/scenes/PlayGame.js';
-
-        const config = {
-            type: Phaser.AUTO,
-            parent: 'game-container',
-            width: window.innerWidth,
-            height: window.innerHeight,
-            backgroundColor: '#222',
-            scene: [MainMenu, Market, PlayGame],
-            physics: {
-                default: 'arcade',
-                arcade: { 
-                    gravity: { y: 0 }, 
-                    debug: false 
-                }
-            },
-            scale: {
-                mode: Phaser.Scale.RESIZE,
-                autoCenter: Phaser.Scale.CENTER_BOTH
+                showError(`Pi Network initialization failed: ${error.message}`);
+                throw error;
             }
         };
 
-        try {
-            new Phaser.Game(config);
-        } catch (error) {
-            document.getElementById('game-container').innerHTML = `
-                <div style="color:red; padding:20px;">
-                    <h2>Game Load Failed</h2>
-                    <p>${error.message}</p>
-                </div>
-            `;
-        }
+        // Main game initialization
+        const initializeGame = async () => {
+            try {
+                const [MainMenu, Market, PlayGame] = await Promise.all([
+                    loadScene('MainMenu'),
+                    loadScene('Market'),
+                    loadScene('PlayGame')
+                ]);
+
+                const config = {
+                    type: Phaser.AUTO,
+                    parent: 'game-container',
+                    width: window.innerWidth,
+                    height: window.innerHeight,
+                    backgroundColor: '#222',
+                    scene: [MainMenu, Market, PlayGame],
+                    physics: {
+                        default: 'arcade',
+                        arcade: { 
+                            gravity: { y: 0 }, 
+                            debug: false 
+                        }
+                    },
+                    scale: {
+                        mode: Phaser.Scale.RESIZE,
+                        autoCenter: Phaser.Scale.CENTER_BOTH
+                    }
+                };
+
+                new Phaser.Game(config);
+                await initializePi();
+                
+            } catch (error) {
+                showError(`Game initialization failed: ${error.message}`);
+            }
+        };
+
+        // Start the application
+        window.addEventListener('load', initializeGame);
     </script>
 </body>
 </html>
