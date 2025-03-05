@@ -1,5 +1,5 @@
 export class PiService {
-    static isSandbox = false; // Switch to production mode
+    static isSandbox = true; // Set to false for production
     static isInitialized = false;
 
     static async initialize() {
@@ -77,8 +77,12 @@ export class PiService {
     }
 
     static async verifyAccessToken(accessToken) {
+        const apiUrl = this.isSandbox 
+            ? 'https://api.sandbox.minepi.com/v2/me' 
+            : 'https://api.minepi.com/v2/me';
+
         try {
-            const response = await fetch('https://api.minepi.com/v2/me', {
+            const response = await fetch(apiUrl, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -97,42 +101,5 @@ export class PiService {
             console.error('Token verification error:', error);
             throw error;
         }
-    }
-
-    static async createPayment(amount, memo) {
-        if (!this.isInitialized) {
-            throw new Error('Pi SDK not initialized. Call initialize() first.');
-        }
-
-        return new Promise((resolve, reject) => {
-            Pi.createPayment({
-                amount: amount,
-                memo: memo,
-                metadata: {
-                    productId: "balloon_points",
-                    environment: this.isSandbox ? "sandbox" : "production"
-                },
-                paymentOptions: {
-                    requireCompletion: true
-                }
-            }, {
-                onReadyForServerApproval: (paymentId) => {
-                    console.log('Payment ready for server approval. Payment ID:', paymentId);
-                    resolve({ paymentId, status: 'pending' });
-                },
-                onReadyForServerCompletion: (paymentId, txid) => {
-                    console.log('Payment ready for server completion. Payment ID:', paymentId, 'TXID:', txid);
-                    resolve({ paymentId, txid, status: 'completed' });
-                },
-                onCancel: (paymentId) => {
-                    console.warn('Payment cancelled. Payment ID:', paymentId);
-                    reject(new Error(`Payment ${paymentId} cancelled by user`));
-                },
-                onError: (error, payment) => {
-                    console.error('Payment error:', error, 'Payment:', payment);
-                    reject(new Error(`Payment error: ${error.message}`));
-                }
-            });
-        });
     }
 }
