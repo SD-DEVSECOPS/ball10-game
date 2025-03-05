@@ -1,7 +1,7 @@
 export class PiService {
     static isSandbox = true; // Set to false for production
     static isInitialized = false;
-    static backendUrl = 'https://your-backend.com'; // Replace with your backend URL
+    static backendUrl = 'https://ball10-game-backend.vercel.app'; // Replace with your deployed backend URL
 
     static async initialize() {
         if (this.isInitialized) return true;
