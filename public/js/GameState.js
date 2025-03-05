@@ -11,14 +11,14 @@ export class GameState {
   }
 
   reset() {
-    this.score = 0; // User's score
-    this.highScore = 0; // User's high score
-    this.balance = 100; // User's initial balance of Balloon Points
-    this.poppedBalloons = 0; // Counter for popped balloons
-    this.balloonSpeed = 150; // Speed of the balloons falling
-    this.gameOverFlag = false; // Game Over flag
-    this.piUser = null; // User info from Pi Network
+    this.score = 0;
+    this.highScore = 0;
+    this.balance = 100;
+    this.poppedBalloons = 0;
+    this.balloonSpeed = 150;
+    this.gameOverFlag = false;
+    this.piUser = null; // Store Pi user data
   }
 
-  // You can add methods for saving or updating data here if needed
+  // Add methods for persistent data if needed
 }

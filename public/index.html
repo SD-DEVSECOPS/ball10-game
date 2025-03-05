@@ -3,23 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- Pi SDK Initialization -->
-    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                await Pi.init({
-                    version: '2.0',
-                    sandbox: true // Set to false in production
-                });
-                console.log('Pi SDK initialized successfully');
-            } catch (error) {
-                console.error('Pi SDK initialization failed:', error);
-            }
-        });
-    </script>
-    
     <title>Ball10 Game</title>
     <style>
         body { 
@@ -35,42 +18,31 @@
     <!-- Game Container -->
     <div id="game-container"></div>
 
-    <!-- Pi Authentication Button -->
-    <div id="authenticate-section" style="display: none; text-align: center; padding: 20px;">
-        <button id="authenticate-button">Authenticate with Pi Network</button>
-    </div>
+    <!-- Pi SDK Initialization -->
+    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await Pi.init({
+                    version: '2.0',
+                    sandbox: true // Set to false in production
+                });
+                console.log('Pi SDK initialized successfully');
+            } catch (error) {
+                console.error('Pi SDK initialization failed:', error);
+            }
+        });
+    </script>
 
     <!-- Phaser 3 -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
 
     <!-- Game Initialization -->
-    <script type="module" nonce="2726c7f26c98">
+    <script type="module">
         import { MainMenu } from '/js/scenes/MainMenu.js';
         import { Market } from '/js/scenes/Market.js';
         import { PlayGame } from '/js/scenes/PlayGame.js';
-        import { PiService } from '/js/services/PiService.js';
 
-        // Pi Authentication Section (Show the authenticate button when needed)
-        document.getElementById('authenticate-button').addEventListener('click', async () => {
-            try {
-                const piUser = await PiService.authenticate(); // Authenticate user via Pi SDK
-                console.log('Authenticated Pi User:', piUser);
-
-                // Store Pi User info in GameState or wherever you manage the user's data
-                // Example: gameState.piUser = piUser;
-
-                // Hide the authentication button after successful login
-                document.getElementById('authenticate-section').style.display = 'none';
-
-                // Proceed with the game logic or transition to the main menu
-                alert('Authentication successful! You can now start the game!');
-            } catch (error) {
-                console.error('Authentication failed:', error);
-                alert('Failed to authenticate with Pi Network. Please try again.');
-            }
-        });
-
-        // Game Configuration for Phaser
         const config = {
             type: Phaser.AUTO,
             parent: 'game-container',
