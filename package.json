@@ -1,10 +1,7 @@
 {
-  "name": "ball10-game",
-  "version": "1.0.0",
-  "scripts": {
-    "start": "serve"
-  },
   "dependencies": {
-    "serve": "^14.2.1"
+    "@pi-apps/pi-sdk": "^2.0.0",
+    "node-fetch": "^3.3.0",
+    "dotenv": "^16.0.3"
   }
 }
