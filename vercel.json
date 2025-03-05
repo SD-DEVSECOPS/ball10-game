@@ -2,22 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/*.js",
+      "src": "backend/api/**/*.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/$1"
-    }
+    { "src": "/api/verify-token", "dest": "/backend/api/verify-token.js" },
+    { "src": "/api/create-payment", "dest": "/backend/api/create-payment.js" },
+    { "src": "/api/approve-payment", "dest": "/backend/api/approve-payment.js" },
+    { "src": "/api/complete-payment", "dest": "/backend/api/complete-payment.js" }
   ]
 }

@@ -16,10 +16,12 @@ export class Market extends Phaser.Scene {
       { fontSize: '20px', fill: '#fff' }
     ).setOrigin(0.5);
 
+    // Buy Now button triggers the payment flow
     this.createButton(centerX, centerY + 50, 'Buy Now', '#f00', () => {
       this.initiatePayment();
     });
 
+    // Main Menu button
     this.createButton(centerX, centerY + 100, 'Main Menu', '#0f0', () => {
       this.scene.start('MainMenu');
     });
@@ -34,6 +36,7 @@ export class Market extends Phaser.Scene {
       .on('pointerdown', onClick);
   }
 
+  // Start the payment process for purchasing balloon points
   async initiatePayment() {
     if (!this.gameState.piUser) {
       alert('Please sign in with Pi first!');
@@ -41,15 +44,16 @@ export class Market extends Phaser.Scene {
     }
 
     try {
-      await PiService.initiatePayment({
-        amount: 1,
-        memo: "Purchase 1000 Balloon Points",
-        metadata: { userId: this.gameState.piUser.uid }
-      });
+      // Start Pi payment process
+      const result = await PiService.createPayment(1, 'Purchase 1000 Balloon Points');
       
-      // TODO: Sync with backend
-      this.gameState.balance += 1000;
-      this.scene.restart();
+      // Sync with backend after payment completion
+      if (result.status === 'completed') {
+        this.gameState.balance += 1000; // Add 1000 points to balance after successful payment
+        this.scene.restart(); // Refresh the scene to reflect updated balance
+      } else {
+        console.error('Payment was not completed or was cancelled');
+      }
     } catch (error) {
       console.error('Payment Error:', error);
     }
