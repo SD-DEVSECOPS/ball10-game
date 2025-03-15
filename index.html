@@ -8,6 +8,7 @@
         body {
             margin: 0;
             overflow: hidden;
+            font-family: Arial, sans-serif;
         }
 
         canvas {
@@ -29,27 +30,84 @@
             font-size: 24px;
             z-index: 9999;
         }
+
+        .pi-auth-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+        }
+
+        .pi-button {
+            background: #14C993;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+            margin: 5px;
+        }
+
+        .pi-button:hover {
+            background: #12B082;
+        }
+
+        .pi-alert {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 25px;
+            border-radius: 5px;
+            font-weight: bold;
+            z-index: 10000;
+        }
+
+        .pi-success {
+            background: #14C993;
+            color: white;
+        }
+
+        .pi-error {
+            background: #FF4757;
+            color: white;
+        }
     </style>
 </head>
 <body>
-    <div id="game-container" style="display: none;">
-        <!-- Phaser game will be injected here -->
+    <div class="pi-auth-container">
+        <button id="pi-auth-button" class="pi-button" style="display: none;">Login with Pi</button>
+        <div id="pi-user-info" style="margin-top: 10px;"></div>
     </div>
 
+    <div id="game-container" style="display: none;"></div>
     <div id="loading-screen">
         <h2>Loading Game...</h2>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-    <script src="https://sdk.minepi.com/pi-sdk.js"></script> <!-- Pi SDK -->
-    <script src="game.js"></script> <!-- Your game logic -->
-    
+    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+    <script src="app.js"></script>
+    <script src="game.js"></script>
+
     <script>
         window.onload = () => {
             const gameContainer = document.getElementById('game-container');
             const loadingScreen = document.getElementById('loading-screen');
 
-            // Hide loading screen and show game container after game is ready
+            Pi.init({ 
+                version: "2.0",
+                sandbox: true,
+                allowedDomains: ['http://127.0.0.1:8080']
+            });
+
             gameContainer.style.display = 'block';
             loadingScreen.style.display = 'none';
         };
