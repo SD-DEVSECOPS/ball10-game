@@ -16,6 +16,8 @@ class MainMenu extends Phaser.Scene {
     }
 
     create() {
+        window.piApp?.showAuthUI();
+
         const centerX = this.cameras.main.width / 2;
         const centerY = this.cameras.main.height / 2;
 
@@ -48,10 +50,12 @@ class Market extends Phaser.Scene {
     }
 
     create() {
+        window.piApp?.hideAuthUI();
+
         const centerX = this.cameras.main.width / 2;
         const centerY = this.cameras.main.height / 2;
 
-        this.add.text(centerX, centerY - 50, "Market Offer: 1000 Balloon Points for 1π", 
+        this.add.text(centerX, centerY - 50, "Market Offer: 1000 Balloon Points for 1π",
             { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
 
         this.add.text(centerX, centerY + 50, 'Buy with Pi', { fontSize: '24px', fill: '#0f0' })
@@ -59,10 +63,10 @@ class Market extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', () => this.initiatePayment());
 
-        this.paymentStatus = this.add.text(centerX, centerY + 100, '', 
+        this.paymentStatus = this.add.text(centerX, centerY + 100, '',
             { fontSize: '18px', fill: '#fff' }).setOrigin(0.5);
 
-        this.add.text(centerX, centerY + 150, 'Return to Main Menu', 
+        this.add.text(centerX, centerY + 150, 'Return to Main Menu',
             { fontSize: '20px', fill: '#0f0' })
             .setOrigin(0.5)
             .setInteractive()
@@ -72,17 +76,13 @@ class Market extends Phaser.Scene {
     initiatePayment() {
         if (window.piApp?.user) {
             this.paymentStatus.setText('Processing payment...');
-            const event = new CustomEvent('paymentInitiated', { 
+            document.dispatchEvent(new CustomEvent('paymentInitiated', {
                 detail: {
                     amount: 1,
                     memo: "Balloon Points Purchase",
-                    metadata: { 
-                        userId: window.piApp.user.uid,
-                        product: "balloon_points"
-                    }
+                    metadata: { product: "balloon_points" }
                 }
-            });
-            document.dispatchEvent(event);
+            }));
         } else {
             this.paymentStatus.setText('Please login first!');
             setTimeout(() => this.paymentStatus.setText(''), 2000);
@@ -101,6 +101,8 @@ class PlayGame extends Phaser.Scene {
     }
 
     create() {
+        window.piApp?.hideAuthUI();
+
         this.balloons = this.physics.add.group();
         this.scoreText = this.add.text(10, 10, `Score: ${score}`, { fontSize: '20px', fill: '#fff' });
         gameOverFlag = false;
@@ -117,13 +119,13 @@ class PlayGame extends Phaser.Scene {
         if (gameOverFlag) return;
 
         const x = Phaser.Math.Between(50, this.cameras.main.width - 50);
-        const balloonType = score >= 20 && Math.random() < 0.05 ? 'redBalloon' : 'balloon';
-        const balloon = this.balloons.create(x, 0, balloonType);
+        const type = score >= 20 && Math.random() < 0.05 ? 'redBalloon' : 'balloon';
+        const balloon = this.balloons.create(x, 0, type);
 
         balloon.setVelocityY(balloonSpeed)
-               .setDisplaySize(80, 120)
-               .setInteractive({ useHandCursor: true })
-               .on('pointerdown', () => this.handleBalloonClick(balloon));
+            .setDisplaySize(80, 120)
+            .setInteractive()
+            .on('pointerdown', () => this.handleBalloonClick(balloon));
     }
 
     handleBalloonClick(balloon) {
@@ -144,8 +146,8 @@ class PlayGame extends Phaser.Scene {
     update() {
         if (gameOverFlag) return;
 
-        this.balloons.children.iterate(balloon => {
-            if (balloon?.y > this.cameras.main.height && balloon.texture.key !== 'redBalloon') {
+        this.balloons.children.iterate(b => {
+            if (b?.y > this.cameras.main.height && b.texture.key !== 'redBalloon') {
                 this.gameOver();
             }
         });
@@ -156,16 +158,15 @@ class PlayGame extends Phaser.Scene {
         this.physics.pause();
         this.balloons.clear(true, true);
 
-        const centerX = this.cameras.main.width / 2;
-        const centerY = this.cameras.main.height / 2;
+        const cx = this.cameras.main.width / 2;
+        const cy = this.cameras.main.height / 2;
 
-        this.add.text(centerX, centerY - 50, 
+        this.add.text(cx, cy - 50,
             `Game Over\nScore: ${score}\nHigh Score: ${highScore}\nBalance: ${balance}`,
             { fontSize: '20px', fill: '#fff', align: 'center' }).setOrigin(0.5);
 
-        this.createButton('Retry', centerY, () => this.restartGame());
-        this.createButton('Continue (10 points)', centerY + 50, () => this.continueGame());
-        this.createButton('Main Menu', centerY + 100, () => this.returnToMenu());
+        this.createButton('Retry', cy, () => this.scene.restart());
+        this.createButton('Main Menu', cy + 50, () => this.scene.start('MainMenu'));
     }
 
     createButton(text, y, callback) {
@@ -174,44 +175,16 @@ class PlayGame extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', callback);
     }
-
-    restartGame() {
-        score = 0;
-        poppedBalloons = 0;
-        balloonSpeed = 150;
-        this.scene.restart();
-    }
-
-    continueGame() {
-        if (balance >= 10) {
-            balance -= 10;
-            this.scene.restart();
-        } else {
-            alert('Not enough points!');
-            this.returnToMenu();
-        }
-    }
-
-    returnToMenu() {
-        balance = 100;
-        score = 0;
-        this.scene.start('MainMenu');
-    }
 }
 
-const config = {
+const game = new Phaser.Game({
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundColor: '#222',
     scene: [MainMenu, Market, PlayGame],
-    physics: {
-        default: 'arcade',
-        arcade: { debug: false }
-    }
-};
-
-const game = new Phaser.Game(config);
+    physics: { default: 'arcade' }
+});
 
 window.addEventListener('resize', () => {
     game.scale.resize(window.innerWidth, window.innerHeight);
