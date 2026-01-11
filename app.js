@@ -1,54 +1,71 @@
-const BACKEND_URL = "https://pi-payment-backend.sdswat93.workers.dev";
-
 class PiApp {
   constructor() {
     this.user = null;
+    this.authResult = null;
+
+    // Cloudflare Worker base URL (senin worker)
+    this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
+
     this.setupAuthButton();
     this.setupEventListeners();
-    this.restoreSession();
+    this.refreshAuthUI();
   }
 
   setupAuthButton() {
     const authButton = document.getElementById("pi-auth-button");
     authButton.addEventListener("click", () => this.handleAuth());
-    this.hideAuthUI(); // scenes decide when to show
   }
 
   setupEventListeners() {
+    // Market -> payment event
     document.addEventListener("paymentInitiated", (e) => this.createPayment(e.detail));
+
+    // Scene değişince UI kontrolü
+    document.addEventListener("sceneChanged", (e) => {
+      this.onSceneChanged(e.detail?.sceneKey);
+    });
   }
 
-  restoreSession() {
-    try {
-      const saved = localStorage.getItem("pi_user");
-      if (saved) this.user = JSON.parse(saved);
-    } catch (_) {}
-    this.updateUI();
+  onSceneChanged(sceneKey) {
+    // Login butonu sadece MainMenu’de ve user yoksa görünsün
+    const container = document.getElementById("pi-auth-container");
+    if (!container) return;
+
+    const shouldShow = (sceneKey === "MainMenu" && !this.user);
+    container.style.display = shouldShow ? "block" : "none";
+
+    // user varsa MainMenu’de bile göstermiyoruz (isteğin buydu)
+    if (this.user) container.style.display = "none";
+  }
+
+  refreshAuthUI() {
+    const info = document.getElementById("pi-user-info");
+    if (!info) return;
+
+    if (this.user) {
+      info.innerHTML = `Logged in as: <b>${this.user.username}</b>`;
+    } else {
+      info.innerHTML = "";
+    }
   }
 
   async handleAuth() {
     try {
+      // Senin dediğin gibi: client-side login yeterli
       const scopes = ["username", "payments"];
       const authResult = await Pi.authenticate(scopes, this.handleIncompletePayment.bind(this));
 
-      this.user = {
-        uid: authResult?.user?.uid || null,
-        username: authResult?.user?.username || "Pi User",
-      };
+      this.authResult = authResult;
+      this.user = authResult?.user || null;
 
-      localStorage.setItem("pi_user", JSON.stringify(this.user));
-      this.updateUI();
-      this.showMessage(`Welcome ${this.user.username}!`);
+      this.refreshAuthUI();
+      this.showMessage(this.user ? `Welcome ${this.user.username}!` : "Logged in!");
+
+      // login olunca MainMenu’de butonu sakla
+      this.onSceneChanged("MainMenu");
     } catch (error) {
-      this.showError(`Login failed: ${error.message}`);
+      this.showError(`Authentication failed: ${error?.message || error}`);
     }
-  }
-
-  logout() {
-    this.user = null;
-    localStorage.removeItem("pi_user");
-    this.updateUI();
-    this.showMessage("Logged out");
   }
 
   createPayment(paymentData) {
@@ -56,7 +73,7 @@ class PiApp {
       onReadyForServerApproval: (paymentId) => this.handleApproval(paymentId),
       onReadyForServerCompletion: (paymentId, txid) => this.handleCompletion(paymentId, txid),
       onCancel: (paymentId) => this.showMessage(`Payment ${paymentId} cancelled`),
-      onError: (error) => this.showError(`Payment error: ${error.message}`),
+      onError: (error) => this.showError(`Payment error: ${error?.message || error}`)
     };
 
     Pi.createPayment(paymentData, callbacks);
@@ -64,89 +81,48 @@ class PiApp {
 
   async handleApproval(paymentId) {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/approve-payment`, {
+      const res = await fetch(`${this.API_BASE}/api/approve-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId }),
+        body: JSON.stringify({ paymentId })
       });
 
-      if (!response.ok) {
-        const t = await response.text();
-        throw new Error(t || "Payment approval failed");
-      }
-    } catch (error) {
-      this.showError(`Payment approval failed: ${error.message}`);
+      if (!res.ok) throw new Error(await res.text());
+    } catch (e) {
+      this.showError(`Payment approval failed: ${e?.message || e}`);
     }
   }
 
   async handleCompletion(paymentId, txid) {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/complete-payment`, {
+      const res = await fetch(`${this.API_BASE}/api/complete-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId, txid }),
+        body: JSON.stringify({ paymentId, txid })
       });
 
-      if (!response.ok) {
-        const t = await response.text();
-        throw new Error(t || "Payment completion failed");
-      }
+      if (!res.ok) throw new Error(await res.text());
 
-      // Add points after real completion
-      balance += 1000;
+      // OYUN ÖDÜLÜ (senin logic)
+      // global balance var (game.js içinde)
+      window.balance = (window.balance ?? 0) + 1000;
+
       this.showMessage("1000 Balloon Points Added!");
 
-      if (window.game?.scene?.isActive?.("Market")) {
+      // Market açıksa refreshle
+      if (window.game?.scene?.isActive("Market")) {
         window.game.scene.getScene("Market").scene.restart();
       }
-    } catch (error) {
-      this.showError(`Payment completion failed: ${error.message}`);
+    } catch (e) {
+      this.showError(`Payment completion failed: ${e?.message || e}`);
     }
   }
 
   handleIncompletePayment(payment) {
+    // Basitçe completion dene
     this.showError("Found incomplete payment - attempting completion...");
-    this.handleCompletion(payment.identifier, payment.transaction?.txid);
-  }
-
-  showAuthUI() {
-    const container = document.querySelector(".pi-auth-container");
-    const authButton = document.getElementById("pi-auth-button");
-    const userInfo = document.getElementById("pi-user-info");
-
-    container.style.display = "block";
-
-    if (this.user) {
-      authButton.style.display = "none";
-      userInfo.style.display = "block";
-      userInfo.innerHTML = `
-        <div style="margin-bottom:8px;">Logged in as: <b>${this.user.username}</b></div>
-        <button id="pi-logout-button" class="pi-button" style="background:#ff4757;">Logout</button>
-      `;
-      document.getElementById("pi-logout-button").addEventListener("click", () => this.logout());
-    } else {
-      userInfo.style.display = "none";
-      authButton.style.display = "inline-block";
-    }
-  }
-
-  hideAuthUI() {
-    const container = document.querySelector(".pi-auth-container");
-    if (container) container.style.display = "none";
-  }
-
-  updateUI() {
-    const authButton = document.getElementById("pi-auth-button");
-    const userInfo = document.getElementById("pi-user-info");
-    if (!authButton || !userInfo) return;
-
-    if (this.user) {
-      authButton.style.display = "none";
-      userInfo.style.display = "block";
-    } else {
-      userInfo.style.display = "none";
-      authButton.style.display = "inline-block";
-    }
+    const txid = payment?.transaction?.txid || null;
+    this.handleCompletion(payment.identifier, txid);
   }
 
   showMessage(message) {
@@ -162,7 +138,7 @@ class PiApp {
     alertDiv.className = "pi-alert pi-error";
     alertDiv.textContent = message;
     document.body.appendChild(alertDiv);
-    setTimeout(() => alertDiv.remove(), 5000);
+    setTimeout(() => alertDiv.remove(), 4500);
   }
 }
 
