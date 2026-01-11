@@ -1,68 +1,73 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ball-10 Game</title>
-    <style>
-        body { margin: 0; overflow: hidden; font-family: Arial; }
-        canvas { display: block; margin: 0 auto; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ball-10 Game</title>
 
-        .pi-auth-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            display: none;
-            z-index: 10000;
-            background: rgba(0,0,0,0.8);
-            padding: 15px;
-            border-radius: 10px;
-            color: white;
-        }
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+    canvas { display: block; margin: 0 auto; }
 
-        .pi-button {
-            background: #14C993;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
+    .pi-auth-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: none;
+      z-index: 10000;
+      background: rgba(0,0,0,0.8);
+      padding: 15px;
+      border-radius: 10px;
+      color: white;
+      text-align: center;
+    }
 
-        .pi-alert {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 15px 25px;
-            border-radius: 5px;
-            font-weight: bold;
-            z-index: 10000;
-        }
+    .pi-button {
+      background: #14C993;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s;
+      margin: 5px;
+    }
+    .pi-button:hover { background: #12B082; }
 
-        .pi-success { background: #14C993; color: white; }
-        .pi-error { background: #FF4757; color: white; }
-    </style>
+    .pi-alert {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 15px 25px;
+      border-radius: 5px;
+      font-weight: bold;
+      z-index: 10000;
+    }
+    .pi-success { background: #14C993; color: white; }
+    .pi-error { background: #FF4757; color: white; }
+  </style>
 </head>
+
 <body>
-
-<div class="pi-auth-container">
+  <div class="pi-auth-container">
     <button id="pi-auth-button" class="pi-button">Login with Pi</button>
-    <div id="pi-user-info" style="margin-top:10px;"></div>
-</div>
+    <div id="pi-user-info" style="margin-top: 10px;"></div>
+  </div>
 
-<script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-<script src="https://sdk.minepi.com/pi-sdk.js"></script>
-<script src="app.js"></script>
-<script src="game.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+  <script src="https://sdk.minepi.com/pi-sdk.js"></script>
 
-<script>
+  <script>
     Pi.init({
-        version: "2.0",
-        sandbox: true,
-        allowedDomains: [window.location.origin]
+      version: "2.0",
+      sandbox: true, // set to false in production
+      allowedDomains: ["https://sd-devsecops.github.io"]
     });
-</script>
+  </script>
 
+  <script src="app.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>
