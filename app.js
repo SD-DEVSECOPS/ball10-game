@@ -10,7 +10,7 @@ class PiApp {
     this.hasPaymentsPermission = false;
   }
 
-  // ✅ Default to both, because your app uses both (donate + claim)
+  // ✅ restore working default: username + payments
   async authenticate(scopes = ["username", "payments"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
@@ -22,7 +22,6 @@ class PiApp {
 
     if (!this.user || !this.accessToken) throw new Error("Authentication failed.");
 
-    // If we requested payments, remember it
     if (Array.isArray(scopes) && scopes.includes("payments")) {
       this.hasPaymentsPermission = true;
     }
@@ -30,7 +29,6 @@ class PiApp {
     return auth;
   }
 
-  // ✅ Always request both when payments are needed
   async ensurePaymentsPermission() {
     if (this.hasPaymentsPermission) return;
     await this.authenticate(["username", "payments"]);
@@ -44,14 +42,9 @@ class PiApp {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded.");
 
-    // Safety: ensure we asked for payments
-    // (If already authorized, this returns immediately)
-    const ensure = this.ensurePaymentsPermission();
-
     const callbacks = {
       onReadyForServerApproval: async (paymentId) => {
         try {
-          await ensure; // ✅ ensure permission before server steps
           this.paymentMetaById[paymentId] = paymentData?.metadata || {};
           uiCallbacks?.onStatus?.("Approving payment...");
           await this.approvePayment(paymentId);
