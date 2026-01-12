@@ -3,24 +3,29 @@ class PiApp {
     this.user = null;
     this.accessToken = null;
 
-    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
     this.hasPaymentsPermission = false;
   }
 
-  // ✅ restore working default: username + payments
+  // ✅ Always request what your app needs
   async authenticate(scopes = ["username", "payments"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
 
     const auth = await Pi.authenticate(scopes, this.onIncompletePaymentFound.bind(this));
 
-    this.user = auth?.user || null;
+    // Some SDK versions return uid/username differently; normalize it.
+    const rawUser = auth?.user || null;
+    const uid = rawUser?.uid || rawUser?.pi_uid || null;
+    const username = rawUser?.username || null;
+
+    this.user = uid ? { uid, username } : rawUser; // keep raw if weird
     this.accessToken = auth?.accessToken || null;
 
-    if (!this.user || !this.accessToken) throw new Error("Authentication failed.");
+    if (!this.accessToken) throw new Error("Authentication failed (missing accessToken).");
+    if (!this.user || !this.user.uid) throw new Error("Authentication failed (missing uid).");
 
     if (Array.isArray(scopes) && scopes.includes("payments")) {
       this.hasPaymentsPermission = true;
