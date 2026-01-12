@@ -11,9 +11,7 @@ function notifyScene(sceneKey) {
 }
 
 class MainMenu extends Phaser.Scene {
-  constructor() {
-    super({ key: "MainMenu" });
-  }
+  constructor() { super({ key: "MainMenu" }); }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -29,18 +27,16 @@ class MainMenu extends Phaser.Scene {
     this.add.text(centerX, centerY - 120, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(centerX, centerY - 60, "Start", { fontSize: "22px", fill: "#0f0" })
-      .setOrigin(0.5)
-      .setInteractive()
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.startGame());
 
     this.add.text(centerX, centerY + 10, "Market", { fontSize: "22px", fill: "#ff0" })
-      .setOrigin(0.5)
-      .setInteractive()
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.scene.start("Market"));
 
     this.add.text(centerX, centerY + 90, `Balloon Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
 
-    // Login butonu kontrolü (sadece MainMenu’de göster)
+    // Login butonu sadece MainMenu’de gösterilir (app.js kontrol ediyor)
     if (window.piApp?.onSceneChanged) window.piApp.onSceneChanged("MainMenu");
   }
 
@@ -54,9 +50,7 @@ class MainMenu extends Phaser.Scene {
 }
 
 class Market extends Phaser.Scene {
-  constructor() {
-    super({ key: "Market" });
-  }
+  constructor() { super({ key: "Market" }); }
 
   create() {
     notifyScene("Market");
@@ -64,52 +58,99 @@ class Market extends Phaser.Scene {
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
 
-    this.add.text(centerX, centerY - 70, "Market Offer: 1000 Balloon Points for 1π",
-      { fontSize: "22px", fill: "#fff", align: "center" }).setOrigin(0.5);
+    this.add.text(centerX, centerY - 120, "Market", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(centerX, centerY + 10, "Buy with Pi", { fontSize: "24px", fill: "#0f0" })
-      .setOrigin(0.5)
-      .setInteractive()
-      .on("pointerdown", () => this.initiatePayment());
+    // BUY POINTS
+    this.add.text(centerX, centerY - 70, "Offer: 1000 Balloon Points for 1π",
+      { fontSize: "20px", fill: "#fff", align: "center" }).setOrigin(0.5);
 
-    this.paymentStatus = this.add.text(centerX, centerY + 60, "",
+    this.add.text(centerX, centerY - 20, "Buy 1000 Points (1π)", { fontSize: "22px", fill: "#0f0" })
+      .setOrigin(0.5).setInteractive()
+      .on("pointerdown", () => this.buyPoints());
+
+    // DONATION
+    this.add.text(centerX, centerY + 40, "Donation ❤️", { fontSize: "22px", fill: "#ff0" }).setOrigin(0.5);
+
+    this.add.text(centerX, centerY + 85, "Donate (choose amount)", { fontSize: "20px", fill: "#0ff" })
+      .setOrigin(0.5).setInteractive()
+      .on("pointerdown", () => this.donateChooseAmount());
+
+    this.paymentStatus = this.add.text(centerX, centerY + 135, "",
       { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(centerX, centerY + 130, `Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(centerX, centerY + 190, `Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(centerX, centerY + 190, "Return to Main Menu", { fontSize: "18px", fill: "#0f0" })
-      .setOrigin(0.5)
-      .setInteractive()
+    this.add.text(centerX, centerY + 240, "Return to Main Menu", { fontSize: "18px", fill: "#0f0" })
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.scene.start("MainMenu"));
   }
 
-  initiatePayment() {
-    if (window.piApp?.user) {
-      this.paymentStatus.setText("Processing payment...");
-
-      const event = new CustomEvent("paymentInitiated", {
-        detail: {
-          amount: 1,
-          memo: "Balloon Points Purchase",
-          metadata: {
-            product: "balloon_points"
-          }
-        }
-      });
-
-      document.dispatchEvent(event);
-      setTimeout(() => this.paymentStatus.setText(""), 1500);
-    } else {
-      this.paymentStatus.setText("Please login first!");
-      setTimeout(() => this.paymentStatus.setText(""), 2000);
+  ensureLoggedIn() {
+    if (!window.piApp?.user) {
+      this.paymentStatus.setText("Please login first (Pi Browser)!");
+      setTimeout(() => this.paymentStatus.setText(""), 2500);
+      return false;
     }
+    return true;
+  }
+
+  buyPoints() {
+    if (!this.ensureLoggedIn()) return;
+
+    this.paymentStatus.setText("Opening Pi payment...");
+    document.dispatchEvent(new CustomEvent("paymentInitiated", {
+      detail: {
+        amount: 1,
+        memo: "Balloon Points Purchase",
+        metadata: {
+          kind: "balloon_points",
+          product: "balloon_points",
+          amount: 1
+        }
+      }
+    }));
+    setTimeout(() => this.paymentStatus.setText(""), 1500);
+  }
+
+  donateChooseAmount() {
+    if (!this.ensureLoggedIn()) return;
+
+    // Kullanıcıya hazır seçenek + custom
+    const choice = prompt(
+      "Donate amount in Pi (examples: 0.1, 0.5, 1). Write a number:",
+      "0.1"
+    );
+
+    if (choice === null) return; // cancel
+
+    const amount = Number(choice);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      this.paymentStatus.setText("Invalid amount!");
+      setTimeout(() => this.paymentStatus.setText(""), 2000);
+      return;
+    }
+
+    // Pi tarafı küçük miktarları kabul etmeyebilir, ama testte denemek için serbest
+    this.paymentStatus.setText(`Opening donation ${amount}π...`);
+
+    document.dispatchEvent(new CustomEvent("paymentInitiated", {
+      detail: {
+        amount: amount,
+        memo: "Ball10 Donation",
+        metadata: {
+          kind: "donation",
+          product: "donation",
+          amount: amount
+        }
+      }
+    }));
+
+    setTimeout(() => this.paymentStatus.setText(""), 1500);
   }
 }
 
 class PlayGame extends Phaser.Scene {
-  constructor() {
-    super({ key: "PlayGame" });
-  }
+  constructor() { super({ key: "PlayGame" }); }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -177,11 +218,10 @@ class PlayGame extends Phaser.Scene {
   }
 
   returnToMenuFromPause() {
-    // progress lost
     this.isPaused = false;
     this.hidePauseMenu();
 
-    // reset game progress like your rule
+    // progress lost
     window.score = 0;
     window.poppedBalloons = 0;
     window.balloonSpeed = 150;
@@ -280,7 +320,6 @@ class PlayGame extends Phaser.Scene {
   }
 
   returnToMenu() {
-    // senin eski kuralın: menuye dönünce reset
     window.balance = 100;
     window.score = 0;
     window.poppedBalloons = 0;
