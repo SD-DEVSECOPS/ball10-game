@@ -1,0 +1,8 @@
+{
+  "name": "pi-payment-backend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "stellar-sdk": "^12.0.0"
+  }
+}
