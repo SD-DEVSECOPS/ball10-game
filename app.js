@@ -10,24 +10,19 @@ class PiApp {
   }
 
   async authenticate() {
-    if (typeof Pi === "undefined") {
-      throw new Error("Pi SDK is not loaded. Please refresh the page.");
-    }
+    if (typeof Pi === "undefined") throw new Error("Pi SDK is not loaded. Refresh the page.");
 
-    // payments scope required for payments
     const scopes = ["username", "payments"];
-    const auth = await Pi.authenticate(scopes, this.handleIncompletePaymentFound.bind(this));
+    const auth = await Pi.authenticate(scopes, this.onIncompletePaymentFound.bind(this));
 
     this.user = auth?.user || null;
     this.accessToken = auth?.accessToken || null;
 
-    if (!this.user || !this.accessToken) {
-      throw new Error("Authentication failed: missing user or access token.");
-    }
+    if (!this.user || !this.accessToken) throw new Error("Authentication failed.");
     return auth;
   }
 
-  handleIncompletePaymentFound(payment) {
+  onIncompletePaymentFound(payment) {
     console.log("Incomplete payment found:", payment);
   }
 
@@ -60,7 +55,7 @@ class PiApp {
 
     return Pi.createPayment(paymentData, callbacks)
       .then((payment) => {
-        uiCallbacks?.onStatus?.("Please confirm the donation in Pi Wallet...");
+        uiCallbacks?.onStatus?.("Please confirm in Pi Wallet...");
         return payment;
       })
       .catch((error) => {
@@ -86,7 +81,6 @@ class PiApp {
     });
     if (!res.ok) throw new Error(await res.text());
 
-    // donation success popup
     const meta = this.paymentMetaById[paymentId] || {};
     const amt = meta?.amount ?? "";
     this.showMessage(`Thanks for your donation${amt ? ` (${amt}π)` : ""}! ❤️`);
