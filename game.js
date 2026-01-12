@@ -59,9 +59,10 @@ class Auth extends Phaser.Scene {
         try {
           isGuest = false;
 
+          // ✅ Pi auth can be slow on mobile. Give it 30 seconds.
           await Promise.race([
             window.Ball10Payments.ensurePiLogin(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 30000))
           ]);
 
           loadProgress();
