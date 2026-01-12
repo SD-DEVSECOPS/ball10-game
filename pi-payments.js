@@ -1,10 +1,12 @@
 // pi-payments.js
 // All Pi login / payments / claim logic lives here.
-// game.js should only call the functions exposed at the bottom.
 
 (function () {
-  // ====== WORKER BASE ======
   const WORKER_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
+
+  // ✅ This tells the Worker which PI_SERVER_KEY to use
+  const PI_ENV = "testnet";
+  window.BALL10_PI_ENV = PI_ENV;
 
   function stringifyDetails(details) {
     try {
@@ -19,7 +21,6 @@
   async function ensurePiLogin() {
     if (!window.piApp) throw new Error("piApp missing. app.js not loaded.");
 
-    // ✅ Login with username ONLY (no payments scope here)
     if (!window.piApp.user?.uid || !window.piApp.accessToken) {
       await window.piApp.authenticate(["username"]);
     }
@@ -29,24 +30,19 @@
     return true;
   }
 
-  async function ensurePaymentsPermission() {
-    if (!window.piApp) throw new Error("piApp missing. app.js not loaded.");
-    // Ask for payments permission ONLY when needed
-    await window.piApp.ensurePaymentsPermission();
-    return true;
-  }
-
   async function claimTestnet1Pi() {
     await ensurePiLogin();
 
     const res = await fetch(`${WORKER_BASE}/api/claim`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-PI-ENV": PI_ENV
+      },
       body: JSON.stringify({ accessToken: window.piApp.accessToken })
     });
 
     const data = await res.json().catch(() => ({}));
-
     if (!res.ok) {
       const msg = data.error || "Claim failed";
       const det = stringifyDetails(data.details);
@@ -61,9 +57,8 @@
       throw new Error("Invalid donation amount.");
     }
 
-    // Must be called by a user action (button click)
     await ensurePiLogin();
-    await ensurePaymentsPermission();
+    await window.piApp.ensurePaymentsPermission();
 
     return window.piApp.createPayment(
       {
@@ -75,7 +70,6 @@
     );
   }
 
-  // ✅ Expose a small stable API for game.js
   window.Ball10Payments = {
     ensurePiLogin,
     claimTestnet1Pi,
