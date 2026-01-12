@@ -3,30 +3,33 @@ class PiApp {
     this.user = null;
     this.accessToken = null;
 
+    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
     this.hasPaymentsPermission = false;
   }
 
-  // ✅ Always request what your app needs
-  async authenticate(scopes = ["username", "payments"]) {
+  // ✅ Default login should be easy: username only
+  // Payments permission is requested only when user taps Donate.
+  async authenticate(scopes = ["username"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
 
     const auth = await Pi.authenticate(scopes, this.onIncompletePaymentFound.bind(this));
 
-    // Some SDK versions return uid/username differently; normalize it.
+    // Normalize user (some SDK versions may vary)
     const rawUser = auth?.user || null;
     const uid = rawUser?.uid || rawUser?.pi_uid || null;
     const username = rawUser?.username || null;
 
-    this.user = uid ? { uid, username } : rawUser; // keep raw if weird
+    this.user = uid ? { uid, username } : rawUser;
     this.accessToken = auth?.accessToken || null;
 
     if (!this.accessToken) throw new Error("Authentication failed (missing accessToken).");
     if (!this.user || !this.user.uid) throw new Error("Authentication failed (missing uid).");
 
+    // Track if we requested payments in this login
     if (Array.isArray(scopes) && scopes.includes("payments")) {
       this.hasPaymentsPermission = true;
     }
@@ -35,8 +38,10 @@ class PiApp {
   }
 
   async ensurePaymentsPermission() {
-    if (this.hasPaymentsPermission) return;
+    if (this.hasPaymentsPermission) return true;
+    // ✅ Ask for payments ONLY when needed
     await this.authenticate(["username", "payments"]);
+    return true;
   }
 
   onIncompletePaymentFound(payment) {
