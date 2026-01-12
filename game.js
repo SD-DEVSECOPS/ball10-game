@@ -1,4 +1,26 @@
-// Global state
+// --- Mode ---
+window.isGuest = false;
+
+// --- Persistent storage helpers (only used when NOT guest) ---
+function balanceKey() {
+  const uid = window.piApp?.user?.uid;
+  return uid ? `ball10_balance_${uid}` : "ball10_balance_guest";
+}
+window.loadBalance = function () {
+  try {
+    const raw = localStorage.getItem(balanceKey());
+    const n = raw === null ? null : Number(raw);
+    if (Number.isFinite(n) && n >= 0) return n;
+  } catch (_) {}
+  return null;
+};
+window.saveBalance = function () {
+  try {
+    localStorage.setItem(balanceKey(), String(window.balance ?? 0));
+  } catch (_) {}
+};
+
+// --- Default values ---
 window.score = 0;
 window.highScore = 0;
 window.balance = 100;
@@ -13,29 +35,54 @@ class AuthGate extends Phaser.Scene {
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
 
-    this.add.text(cx, cy - 140, "Ball-10", { fontSize: "44px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(cx, cy - 160, "Ball-10", { fontSize: "44px", fill: "#fff" }).setOrigin(0.5);
 
-    this.statusText = this.add.text(cx, cy - 60, "Tap to Login with Pi", {
+    this.statusText = this.add.text(cx, cy - 90, "Choose a mode", {
       fontSize: "18px", fill: "#fff", align: "center"
     }).setOrigin(0.5);
 
-    this.loginBtn = this.add.text(cx, cy + 10, "Tap to Login", { fontSize: "24px", fill: "#0f0" })
-      .setOrigin(0.5)
-      .setInteractive()
+    // Login button
+    this.loginBtn = this.add.text(cx, cy - 10, "Login with Pi", { fontSize: "26px", fill: "#0f0" })
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.tryAuth());
+
+    // Guest button
+    this.guestBtn = this.add.text(cx, cy + 55, "Continue as Guest", { fontSize: "22px", fill: "#ff0" })
+      .setOrigin(0.5).setInteractive()
+      .on("pointerdown", () => this.continueGuest());
+
+    this.add.text(cx, cy + 120,
+      "Guest mode: You can play, but you cannot use Market or Points.\nPi login is required for donations and purchases.",
+      { fontSize: "13px", fill: "#ddd", align: "center", wordWrap: { width: this.cameras.main.width - 40 } }
+    ).setOrigin(0.5);
   }
 
   async tryAuth() {
     this.statusText.setText("Authenticating with Pi...");
     try {
+      window.isGuest = false;
+
       await Promise.race([
         window.piApp.ensureAuthenticated(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 10000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
       ]);
+
+      // Load per-user balance
+      const saved = window.loadBalance();
+      if (saved !== null) window.balance = saved;
+      else window.saveBalance();
+
       this.scene.start("MainMenu");
     } catch (e) {
       this.statusText.setText(`Login failed:\n${e?.message || e}`);
     }
+  }
+
+  continueGuest() {
+    window.isGuest = true;
+    // In guest mode, we do not persist or allow points economy
+    window.balance = 0;
+    this.scene.start("MainMenu");
   }
 }
 
@@ -51,18 +98,24 @@ class MainMenu extends Phaser.Scene {
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
 
-    const username = window.piApp?.user?.username ? ` (${window.piApp.user.username})` : "";
-    this.add.text(cx, cy - 140, `Main Menu${username}`, { fontSize: "28px", fill: "#fff" }).setOrigin(0.5);
+    const username = (!window.isGuest && window.piApp?.user?.username) ? ` (${window.piApp.user.username})` : "";
+    const title = window.isGuest ? "Main Menu (Guest)" : `Main Menu${username}`;
+
+    this.add.text(cx, cy - 140, title, { fontSize: "28px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(cx, cy - 60, "Start", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.startGame());
 
-    this.add.text(cx, cy + 10, "Market", { fontSize: "22px", fill: "#ff0" })
-      .setOrigin(0.5).setInteractive()
-      .on("pointerdown", () => this.scene.start("Market"));
+    if (!window.isGuest) {
+      this.add.text(cx, cy + 10, "Market", { fontSize: "22px", fill: "#ff0" })
+        .setOrigin(0.5).setInteractive()
+        .on("pointerdown", () => this.scene.start("Market"));
 
-    this.add.text(cx, cy + 90, `Balloon Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
+      this.add.text(cx, cy + 90, `Balloon Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
+    } else {
+      this.add.text(cx, cy + 30, "Market is disabled in Guest mode.", { fontSize: "16px", fill: "#ddd" }).setOrigin(0.5);
+    }
   }
 
   startGame() {
@@ -78,81 +131,79 @@ class Market extends Phaser.Scene {
   constructor() { super({ key: "Market" }); }
 
   create() {
+    if (window.isGuest) {
+      // Safety: if someone tries to open Market in guest mode
+      this.scene.start("MainMenu");
+      return;
+    }
+
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
 
-    this.add.text(cx, cy - 150, "Market", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(cx, cy - 160, "Market", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(cx, cy - 105, "Offer: 1000 Balloon Points for 1π", { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(cx, cy - 120, "Offer: 1000 Balloon Points for 1π", { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(cx, cy - 65, "Buy 1000 Points (1π)", { fontSize: "22px", fill: "#0f0" })
+    this.add.text(cx, cy - 80, "Buy 1000 Points (1π)", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.buyPoints());
 
-    this.add.text(cx, cy + 10, "Donation ❤️", { fontSize: "22px", fill: "#ff0" }).setOrigin(0.5);
+    this.add.text(cx, cy - 10, "Donation ❤️", { fontSize: "22px", fill: "#ff0" }).setOrigin(0.5);
 
-    this.add.text(cx, cy + 50, "Donate (choose amount)", { fontSize: "20px", fill: "#0ff" })
+    this.add.text(cx, cy + 30, "Donate (choose amount)", { fontSize: "20px", fill: "#0ff" })
       .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.donateChooseAmount());
 
-    this.status = this.add.text(cx, cy + 95, "", { fontSize: "16px", fill: "#fff", align: "center" })
-      .setOrigin(0.5);
+    this.status = this.add.text(cx, cy + 80, "", {
+      fontSize: "15px", fill: "#fff", align: "center",
+      wordWrap: { width: this.cameras.main.width - 40 }
+    }).setOrigin(0.5);
 
-    this.add.text(cx, cy + 150, `Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
+    this.balanceText = this.add.text(cx, cy + 140, `Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" })
+      .setOrigin(0.5);
 
     this.add.text(cx, cy + 210, "Return to Main Menu", { fontSize: "18px", fill: "#0f0" })
       .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.scene.start("MainMenu"));
   }
 
-  setStatus(msg) {
-    this.status.setText(msg || "");
-  }
+  setStatus(msg) { this.status.setText(msg || ""); }
+  refreshBalance() { this.balanceText.setText(`Balance: ${window.balance}`); }
 
-  buyPoints() {
-    if (!window.piApp?.user) {
-      this.setStatus("Not logged in.");
+  async buyPoints() {
+    if (!window.piApp?.user) { this.setStatus("Not logged in."); return; }
+
+    // ✅ Acknowledge device-only storage BEFORE payment
+    const ok = await window.piApp.confirmDeviceOnlyPoints();
+    if (!ok) {
+      this.setStatus("Purchase cancelled. You must acknowledge the device-only storage warning.");
       return;
     }
 
     this.setStatus("Creating payment...");
 
     window.piApp.createPayment(
+      { amount: 1, memo: "Balloon Points Purchase", metadata: { kind: "balloon_points", amount: 1 } },
       {
-        amount: 1,
-        memo: "Balloon Points Purchase",
-        metadata: { kind: "balloon_points", amount: 1 }
-      },
-      {
-        onStatus: (m) => this.setStatus(m),
+        onStatus: (m) => { this.setStatus(m); this.refreshBalance(); },
         onError: (e) => this.setStatus(`Payment failed: ${e?.message || e}`)
       }
-    ).catch(() => {});
+    ).then(() => this.refreshBalance()).catch(() => {});
   }
 
   donateChooseAmount() {
-    if (!window.piApp?.user) {
-      this.setStatus("Not logged in.");
-      return;
-    }
+    if (!window.piApp?.user) { this.setStatus("Not logged in."); return; }
 
     const choice = prompt("Enter donation amount in Pi (e.g. 0.1, 0.5, 1):", "0.1");
     if (choice === null) return;
 
     const amount = Number(choice);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      this.setStatus("Invalid amount.");
-      return;
-    }
+    if (!Number.isFinite(amount) || amount <= 0) { this.setStatus("Invalid amount."); return; }
 
     this.setStatus("Creating donation payment...");
 
     window.piApp.createPayment(
-      {
-        amount,
-        memo: "Ball10 Donation",
-        metadata: { kind: "donation", amount }
-      },
+      { amount, memo: "Ball10 Donation", metadata: { kind: "donation", amount } },
       {
         onStatus: (m) => this.setStatus(m),
         onError: (e) => this.setStatus(`Donation failed: ${e?.message || e}`)
@@ -172,10 +223,16 @@ class PlayGame extends Phaser.Scene {
   create() {
     this.balloons = this.physics.add.group();
     this.scoreText = this.add.text(10, 10, `Score: ${window.score}`, { fontSize: "20px", fill: "#fff" });
-    this.balanceText = this.add.text(10, 36, `Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" });
+
+    // In guest mode, don't show balance
+    this.balanceText = this.add.text(10, 36,
+      window.isGuest ? "Guest mode" : `Balance: ${window.balance}`,
+      { fontSize: "18px", fill: "#fff" }
+    );
 
     window.gameOverFlag = false;
 
+    // ESC pause
     this.isPaused = false;
     this.pauseOverlay = null;
     this.input.keyboard.on("keydown-ESC", () => this.togglePause());
@@ -264,20 +321,17 @@ class PlayGame extends Phaser.Scene {
     balloon.destroy();
 
     window.poppedBalloons++;
-    if (window.poppedBalloons % 5000 === 0) window.balance += 10;
-    if (window.score % 100 === 0) window.balloonSpeed += 10;
 
-    this.balanceText.setText(`Balance: ${window.balance}`);
-  }
-
-  update() {
-    if (window.gameOverFlag || this.isPaused) return;
-
-    this.balloons.children.iterate(b => {
-      if (b?.y > this.cameras.main.height && b.texture.key !== "redBalloon") {
-        this.gameOver();
+    // In guest mode, no points economy
+    if (!window.isGuest) {
+      if (window.poppedBalloons % 5000 === 0) {
+        window.balance += 10;
+        window.saveBalance();
       }
-    });
+      this.balanceText.setText(`Balance: ${window.balance}`);
+    }
+
+    if (window.score % 100 === 0) window.balloonSpeed += 10;
   }
 
   gameOver() {
@@ -293,11 +347,16 @@ class PlayGame extends Phaser.Scene {
     const cy = this.cameras.main.height / 2;
 
     this.add.text(cx, cy - 70,
-      `Game Over\nScore: ${window.score}\nHigh Score: ${window.highScore}\nBalance: ${window.balance}`,
+      `Game Over\nScore: ${window.score}\nHigh Score: ${window.highScore}`,
       { fontSize: "20px", fill: "#fff", align: "center" }).setOrigin(0.5);
 
     this.createButton("Retry", cy + 10, () => this.restartGame());
-    this.createButton("Continue (10 points)", cy + 60, () => this.continueGame());
+
+    // In guest mode, disable Continue spending
+    if (!window.isGuest) {
+      this.createButton("Continue (10 points)", cy + 60, () => this.continueGame());
+    }
+
     this.createButton("Main Menu", cy + 110, () => this.returnToMenu());
   }
 
@@ -319,6 +378,7 @@ class PlayGame extends Phaser.Scene {
   continueGame() {
     if (window.balance >= 10) {
       window.balance -= 10;
+      window.saveBalance();
       window.gameOverFlag = false;
       this.scene.restart();
     } else {
@@ -328,11 +388,6 @@ class PlayGame extends Phaser.Scene {
   }
 
   returnToMenu() {
-    window.balance = 100;
-    window.score = 0;
-    window.poppedBalloons = 0;
-    window.balloonSpeed = 150;
-    window.gameOverFlag = false;
     this.scene.start("MainMenu");
   }
 }
