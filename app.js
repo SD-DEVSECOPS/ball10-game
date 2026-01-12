@@ -3,14 +3,15 @@ class PiApp {
     this.user = null;
     this.accessToken = null;
 
-    // Worker backend (same for both envs unless you purposely split it)
+    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
     this.hasPaymentsPermission = false;
   }
 
-  async authenticate(scopes = ["username"]) {
+  // ✅ Default to both, because your app uses both (donate + claim)
+  async authenticate(scopes = ["username", "payments"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
 
@@ -21,7 +22,7 @@ class PiApp {
 
     if (!this.user || !this.accessToken) throw new Error("Authentication failed.");
 
-    // If we ever requested payments successfully, remember it
+    // If we requested payments, remember it
     if (Array.isArray(scopes) && scopes.includes("payments")) {
       this.hasPaymentsPermission = true;
     }
@@ -29,9 +30,10 @@ class PiApp {
     return auth;
   }
 
+  // ✅ Always request both when payments are needed
   async ensurePaymentsPermission() {
     if (this.hasPaymentsPermission) return;
-    await this.authenticate(["payments"]);
+    await this.authenticate(["username", "payments"]);
   }
 
   onIncompletePaymentFound(payment) {
@@ -42,9 +44,14 @@ class PiApp {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded.");
 
+    // Safety: ensure we asked for payments
+    // (If already authorized, this returns immediately)
+    const ensure = this.ensurePaymentsPermission();
+
     const callbacks = {
       onReadyForServerApproval: async (paymentId) => {
         try {
+          await ensure; // ✅ ensure permission before server steps
           this.paymentMetaById[paymentId] = paymentData?.metadata || {};
           uiCallbacks?.onStatus?.("Approving payment...");
           await this.approvePayment(paymentId);
