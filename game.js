@@ -7,64 +7,40 @@ window.gameOverFlag = false;
 window.balloonSpeed = 150;
 
 class AuthGate extends Phaser.Scene {
-  constructor() {
-    super({ key: "AuthGate" });
-  }
+  constructor() { super({ key: "AuthGate" }); }
 
   create() {
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
 
-    this.add.text(cx, cy - 120, "Ball-10", { fontSize: "44px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(cx, cy - 140, "Ball-10", { fontSize: "44px", fill: "#fff" }).setOrigin(0.5);
 
-    this.statusText = this.add.text(
-      cx,
-      cy - 30,
-      "Authenticating with Pi...",
-      { fontSize: "18px", fill: "#fff", align: "center" }
-    ).setOrigin(0.5);
+    this.statusText = this.add.text(cx, cy - 60, "Tap to Login with Pi", {
+      fontSize: "18px", fill: "#fff", align: "center"
+    }).setOrigin(0.5);
 
-    this.retryBtn = this.add.text(cx, cy + 60, "Retry Login", { fontSize: "22px", fill: "#0f0" })
+    this.loginBtn = this.add.text(cx, cy + 10, "Tap to Login", { fontSize: "24px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
-      .setVisible(false)
       .on("pointerdown", () => this.tryAuth());
-
-    this.helpText = this.add.text(
-      cx,
-      cy + 110,
-      "If this keeps failing, open the game inside Pi Browser.",
-      { fontSize: "14px", fill: "#ddd", align: "center" }
-    ).setOrigin(0.5).setVisible(false);
-
-    this.tryAuth();
   }
 
   async tryAuth() {
-    this.retryBtn.setVisible(false);
-    this.helpText.setVisible(false);
     this.statusText.setText("Authenticating with Pi...");
-
     try {
-      if (!window.piApp) throw new Error("PiApp is not ready yet.");
-
-      await window.piApp.ensureAuthenticated();
-
-      // Auth OK -> go to MainMenu
+      await Promise.race([
+        window.piApp.ensureAuthenticated(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 10000))
+      ]);
       this.scene.start("MainMenu");
     } catch (e) {
-      const msg = e?.message || String(e);
-      this.statusText.setText(`Login failed:\n${msg}`);
-      this.retryBtn.setVisible(true);
-      this.helpText.setVisible(true);
+      this.statusText.setText(`Login failed:\n${e?.message || e}`);
     }
   }
 }
 
 class MainMenu extends Phaser.Scene {
-  constructor() {
-    super({ key: "MainMenu" });
-  }
+  constructor() { super({ key: "MainMenu" }); }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -75,16 +51,15 @@ class MainMenu extends Phaser.Scene {
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
 
-    this.add.text(cx, cy - 120, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
+    const username = window.piApp?.user?.username ? ` (${window.piApp.user.username})` : "";
+    this.add.text(cx, cy - 140, `Main Menu${username}`, { fontSize: "28px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(cx, cy - 60, "Start", { fontSize: "22px", fill: "#0f0" })
-      .setOrigin(0.5)
-      .setInteractive()
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.startGame());
 
     this.add.text(cx, cy + 10, "Market", { fontSize: "22px", fill: "#ff0" })
-      .setOrigin(0.5)
-      .setInteractive()
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.scene.start("Market"));
 
     this.add.text(cx, cy + 90, `Balloon Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
@@ -100,9 +75,7 @@ class MainMenu extends Phaser.Scene {
 }
 
 class Market extends Phaser.Scene {
-  constructor() {
-    super({ key: "Market" });
-  }
+  constructor() { super({ key: "Market" }); }
 
   create() {
     const cx = this.cameras.main.width / 2;
@@ -113,45 +86,53 @@ class Market extends Phaser.Scene {
     this.add.text(cx, cy - 105, "Offer: 1000 Balloon Points for 1π", { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(cx, cy - 65, "Buy 1000 Points (1π)", { fontSize: "22px", fill: "#0f0" })
-      .setOrigin(0.5)
-      .setInteractive()
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.buyPoints());
 
     this.add.text(cx, cy + 10, "Donation ❤️", { fontSize: "22px", fill: "#ff0" }).setOrigin(0.5);
 
     this.add.text(cx, cy + 50, "Donate (choose amount)", { fontSize: "20px", fill: "#0ff" })
-      .setOrigin(0.5)
-      .setInteractive()
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.donateChooseAmount());
 
-    this.status = this.add.text(cx, cy + 95, "", { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
+    this.status = this.add.text(cx, cy + 95, "", { fontSize: "16px", fill: "#fff", align: "center" })
+      .setOrigin(0.5);
 
     this.add.text(cx, cy + 150, `Balance: ${window.balance}`, { fontSize: "18px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(cx, cy + 210, "Return to Main Menu", { fontSize: "18px", fill: "#0f0" })
-      .setOrigin(0.5)
-      .setInteractive()
+      .setOrigin(0.5).setInteractive()
       .on("pointerdown", () => this.scene.start("MainMenu"));
+  }
+
+  setStatus(msg) {
+    this.status.setText(msg || "");
   }
 
   buyPoints() {
     if (!window.piApp?.user) {
-      this.status.setText("Not logged in.");
+      this.setStatus("Not logged in.");
       return;
     }
 
-    this.status.setText("Opening Pi payment...");
+    this.setStatus("Creating payment...");
 
-    window.piApp.createPayment({
-      amount: 1,
-      memo: "Balloon Points Purchase",
-      metadata: { kind: "balloon_points", amount: 1 }
-    });
+    window.piApp.createPayment(
+      {
+        amount: 1,
+        memo: "Balloon Points Purchase",
+        metadata: { kind: "balloon_points", amount: 1 }
+      },
+      {
+        onStatus: (m) => this.setStatus(m),
+        onError: (e) => this.setStatus(`Payment failed: ${e?.message || e}`)
+      }
+    ).catch(() => {});
   }
 
   donateChooseAmount() {
     if (!window.piApp?.user) {
-      this.status.setText("Not logged in.");
+      this.setStatus("Not logged in.");
       return;
     }
 
@@ -160,24 +141,28 @@ class Market extends Phaser.Scene {
 
     const amount = Number(choice);
     if (!Number.isFinite(amount) || amount <= 0) {
-      this.status.setText("Invalid amount.");
+      this.setStatus("Invalid amount.");
       return;
     }
 
-    this.status.setText(`Opening donation (${amount}π)...`);
+    this.setStatus("Creating donation payment...");
 
-    window.piApp.createPayment({
-      amount,
-      memo: "Ball10 Donation",
-      metadata: { kind: "donation", amount }
-    });
+    window.piApp.createPayment(
+      {
+        amount,
+        memo: "Ball10 Donation",
+        metadata: { kind: "donation", amount }
+      },
+      {
+        onStatus: (m) => this.setStatus(m),
+        onError: (e) => this.setStatus(`Donation failed: ${e?.message || e}`)
+      }
+    ).catch(() => {});
   }
 }
 
 class PlayGame extends Phaser.Scene {
-  constructor() {
-    super({ key: "PlayGame" });
-  }
+  constructor() { super({ key: "PlayGame" }); }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -191,7 +176,6 @@ class PlayGame extends Phaser.Scene {
 
     window.gameOverFlag = false;
 
-    // ESC pause
     this.isPaused = false;
     this.pauseOverlay = null;
     this.input.keyboard.on("keydown-ESC", () => this.togglePause());
