@@ -3,23 +3,35 @@ class PiApp {
     this.user = null;
     this.accessToken = null;
 
-    // Worker backend
+    // Worker backend (same for both envs unless you purposely split it)
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
+    this.hasPaymentsPermission = false;
   }
 
-  async authenticate() {
-    if (typeof Pi === "undefined") throw new Error("Pi SDK is not loaded. Refresh the page.");
+  async authenticate(scopes = ["username"]) {
+    const Pi = window.Pi;
+    if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
 
-    const scopes = ["username", "payments"];
     const auth = await Pi.authenticate(scopes, this.onIncompletePaymentFound.bind(this));
 
     this.user = auth?.user || null;
     this.accessToken = auth?.accessToken || null;
 
     if (!this.user || !this.accessToken) throw new Error("Authentication failed.");
+
+    // If we ever requested payments successfully, remember it
+    if (Array.isArray(scopes) && scopes.includes("payments")) {
+      this.hasPaymentsPermission = true;
+    }
+
     return auth;
+  }
+
+  async ensurePaymentsPermission() {
+    if (this.hasPaymentsPermission) return;
+    await this.authenticate(["payments"]);
   }
 
   onIncompletePaymentFound(payment) {
@@ -27,6 +39,9 @@ class PiApp {
   }
 
   createPayment(paymentData, uiCallbacks = {}) {
+    const Pi = window.Pi;
+    if (!Pi) throw new Error("Pi SDK is not loaded.");
+
     const callbacks = {
       onReadyForServerApproval: async (paymentId) => {
         try {
