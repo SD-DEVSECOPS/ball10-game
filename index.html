@@ -19,9 +19,9 @@
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
   <script src="https://sdk.minepi.com/pi-sdk.js"></script>
 
-  <!-- ✅ TESTNET BRANCH: sandbox true -->
+  <!-- ✅ Pi Browser should use sandbox:false (even for testnet requirements) -->
   <script>
-    Pi.init({ version: "2.0", sandbox: true });
+    Pi.init({ version: "2.0", sandbox: false });
   </script>
 
   <script src="app.js"></script>
