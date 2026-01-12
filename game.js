@@ -140,7 +140,7 @@ class MainMenu extends Phaser.Scene {
           }
 
           const res = await fetch(
-            "https://WILL_BE_REPLACED_WITH_TESTNET_A2U_WORKER/api/claim",
+           "https://pi-payment-backend.sdswat93.workers.dev/api/claim",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
