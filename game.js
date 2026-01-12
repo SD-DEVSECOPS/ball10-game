@@ -38,12 +38,22 @@ function saveProgress() {
 // ====== Helpers ======
 async function ensurePiLogin() {
   if (!window.piApp) throw new Error("piApp missing. app.js not loaded.");
-  // This uses your app.js authenticate() (should request username+payments by default)
+  // Authenticate if missing
   if (!window.piApp.user?.uid || !window.piApp.accessToken) {
     await window.piApp.authenticate();
   }
   if (!window.piApp.user?.uid) throw new Error("Auth returned no uid.");
   return true;
+}
+
+function stringifyDetails(details) {
+  try {
+    if (details === undefined || details === null) return "";
+    if (typeof details === "string") return details;
+    return JSON.stringify(details);
+  } catch {
+    return String(details);
+  }
 }
 
 async function claimTestnet1Pi() {
@@ -56,7 +66,14 @@ async function claimTestnet1Pi() {
   });
 
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Claim failed");
+
+  // ✅ Surface full error details returned by Worker
+  if (!res.ok) {
+    const msg = data.error || "Claim failed";
+    const det = stringifyDetails(data.details);
+    throw new Error(det ? `${msg}\n\nDetails: ${det}` : msg);
+  }
+
   return data;
 }
 
