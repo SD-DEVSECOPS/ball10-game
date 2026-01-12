@@ -3,7 +3,7 @@ class PiApp {
     this.user = null;
     this.authResult = null;
 
-    // Cloudflare Worker base URL (senin worker)
+    // Your Cloudflare Worker base URL
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     // paymentId -> metadata map
@@ -31,8 +31,8 @@ class PiApp {
     const container = document.getElementById("pi-auth-container");
     if (!container) return;
 
-    // Login butonu sadece MainMenu’de ve user yoksa görünür
-    const shouldShow = (sceneKey === "MainMenu" && !this.user);
+    // Show Login only on MainMenu, only if not logged in
+    const shouldShow = sceneKey === "MainMenu" && !this.user;
     container.style.display = shouldShow ? "block" : "none";
 
     if (this.user) container.style.display = "none";
@@ -42,22 +42,15 @@ class PiApp {
     const info = document.getElementById("pi-user-info");
     if (!info) return;
 
-    if (this.user) {
-      info.innerHTML = `Logged in as: <b>${this.user.username}</b>`;
-    } else {
-      info.innerHTML = "";
-    }
+    info.innerHTML = this.user ? `Logged in as: <b>${this.user.username}</b>` : "";
   }
 
   async handleAuth() {
     try {
       if (typeof Pi === "undefined") {
-        this.showError("Pi SDK yüklenmedi. Sayfayı yenile.");
+        this.showError("Pi SDK is not loaded. Please refresh the page.");
         return;
       }
-
-      // NOT: Pi Browser kontrolünü kaldırdık.
-      // Pi Browser değilse authenticate zaten hata verir, onu yakalayıp mesaj basacağız.
 
       const scopes = ["username", "payments"];
       const authResult = await Pi.authenticate(scopes, this.handleIncompletePayment.bind(this));
@@ -66,29 +59,18 @@ class PiApp {
       this.user = authResult?.user || null;
 
       this.refreshAuthUI();
-      this.showMessage(this.user ? `Welcome ${this.user.username}!` : "Logged in!");
+      this.showMessage(this.user ? `Welcome ${this.user.username}!` : "Logged in successfully.");
 
-      // login olunca MainMenu’de butonu sakla
       this.onSceneChanged("MainMenu");
     } catch (error) {
-      // Buraya düşüyorsa genelde:
-      // - Pi Browser dışında açılmıştır
-      // - Pi SDK init/allowedDomains sıkıntısı vardır
-      // - Sandbox/prod ortam uyuşmazlığı vardır
       const msg = error?.message || String(error);
-
-      // Daha yardımcı mesaj:
-      if (msg.toLowerCase().includes("not allowed") || msg.toLowerCase().includes("domain")) {
-        this.showError("Domain izin hatası: Pi.init allowedDomains ayarı bu domaini içermiyor.");
-      } else {
-        this.showError(`Authentication failed: ${msg}`);
-      }
+      this.showError(`Authentication failed: ${msg}`);
     }
   }
 
   createPayment(paymentData) {
     if (typeof Pi === "undefined") {
-      this.showError("Pi SDK yüklenmedi.");
+      this.showError("Pi SDK is not loaded.");
       return;
     }
 
@@ -101,7 +83,7 @@ class PiApp {
         this.paymentMetaById[paymentId] = this.paymentMetaById[paymentId] || (paymentData?.metadata || {});
         return this.handleCompletion(paymentId, txid);
       },
-      onCancel: (paymentId) => this.showMessage(`Payment ${paymentId} cancelled`),
+      onCancel: (paymentId) => this.showMessage(`Payment ${paymentId} was cancelled.`),
       onError: (error) => this.showError(`Payment error: ${error?.message || error}`)
     };
 
@@ -137,14 +119,14 @@ class PiApp {
 
       if (kind === "balloon_points") {
         window.balance = (window.balance ?? 0) + 1000;
-        this.showMessage("1000 Balloon Points Added!");
+        this.showMessage("1000 Balloon Points added!");
 
         if (window.game?.scene?.isActive("Market")) {
           window.game.scene.getScene("Market").scene.restart();
         }
       } else if (kind === "donation") {
         const amt = meta?.amount ?? "";
-        this.showMessage(`Thanks for the donation ${amt ? "(" + amt + "π)" : ""} ❤️`);
+        this.showMessage(`Thanks for the donation ${amt ? `(${amt}π)` : ""} ❤️`);
       } else {
         this.showMessage("Payment completed ✅");
       }
@@ -154,7 +136,7 @@ class PiApp {
   }
 
   handleIncompletePayment(payment) {
-    this.showError("Found incomplete payment - attempting completion...");
+    this.showError("Found an incomplete payment — attempting to complete...");
     const txid = payment?.transaction?.txid || null;
     this.handleCompletion(payment.identifier, txid);
   }
@@ -172,7 +154,7 @@ class PiApp {
     alertDiv.className = "pi-alert pi-error";
     alertDiv.textContent = message;
     document.body.appendChild(alertDiv);
-    setTimeout(() => alertDiv.remove(), 4500);
+    setTimeout(() => alertDiv.remove(), 5000);
   }
 }
 
