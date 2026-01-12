@@ -6,7 +6,7 @@ let poppedBalloons = 0;
 let gameOverFlag = false;
 let balloonSpeed = 150;
 
-// ====== NEW: MODE + STORAGE (minimal) ======
+// ====== MODE + STORAGE ======
 let isGuest = false;
 
 function storageKey(name) {
@@ -32,6 +32,32 @@ function saveProgress() {
   } catch (_) {}
 }
 
+// ====== CONFIG (TESTNET) ======
+const WORKER_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
+
+// ====== HELPERS ======
+async function ensurePiLogin() {
+  if (!window.piApp) throw new Error("Pi app is not loaded.");
+  if (!window.piApp.user || !window.piApp.accessToken) {
+    // IMPORTANT: do NOT pass args; piapp.js already requests username+payments
+    await window.piApp.authenticate();
+  }
+}
+
+async function claimTestnetPi() {
+  await ensurePiLogin();
+
+  const res = await fetch(`${WORKER_BASE}/api/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accessToken: window.piApp.accessToken })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Claim failed");
+  return data;
+}
+
 // ====== AUTH SCENE ======
 class Auth extends Phaser.Scene {
   constructor() {
@@ -42,22 +68,28 @@ class Auth extends Phaser.Scene {
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
 
-    this.add.text(centerX, centerY - 140, "Ball-10", { fontSize: "44px", fill: "#fff" }).setOrigin(0.5);
+    this.add
+      .text(centerX, centerY - 140, "Ball-10", { fontSize: "44px", fill: "#fff" })
+      .setOrigin(0.5);
 
-    this.status = this.add.text(centerX, centerY - 70, "Choose a mode:", {
-      fontSize: "16px",
-      fill: "#ddd",
-      align: "center"
-    }).setOrigin(0.5);
+    this.status = this.add
+      .text(centerX, centerY - 70, "Choose a mode:", {
+        fontSize: "16px",
+        fill: "#ddd",
+        align: "center"
+      })
+      .setOrigin(0.5);
 
-    this.add.text(centerX, centerY, "Login with Pi", { fontSize: "26px", fill: "#0f0" })
+    // Login with Pi
+    this.add
+      .text(centerX, centerY, "Login with Pi", { fontSize: "26px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", async () => {
         this.status.setText("Authenticating with Pi...");
         try {
           isGuest = false;
-          await window.piApp.authenticate(["username"]);
+          await ensurePiLogin();
           loadProgress();
           this.scene.start("MainMenu");
         } catch (e) {
@@ -67,7 +99,9 @@ class Auth extends Phaser.Scene {
         }
       });
 
-    this.add.text(centerX, centerY + 60, "Continue as Guest", { fontSize: "20px", fill: "#ff0" })
+    // Guest mode
+    this.add
+      .text(centerX, centerY + 60, "Continue as Guest", { fontSize: "20px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", () => {
@@ -76,12 +110,13 @@ class Auth extends Phaser.Scene {
         this.scene.start("MainMenu");
       });
 
-    this.add.text(
-      centerX,
-      centerY + 120,
-      "Guest mode: Play only. Donations require Pi login.",
-      { fontSize: "13px", fill: "#bbb", align: "center" }
-    ).setOrigin(0.5);
+    this.add
+      .text(centerX, centerY + 120, "Guest mode: Play only. Donations/Claim require Pi login.", {
+        fontSize: "13px",
+        fill: "#bbb",
+        align: "center"
+      })
+      .setOrigin(0.5);
   }
 }
 
@@ -103,16 +138,20 @@ class MainMenu extends Phaser.Scene {
     const title = isGuest ? "Main Menu (Guest)" : "Main Menu";
     this.add.text(centerX, centerY - 140, title, { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(centerX, centerY - 80, "Start", { fontSize: "22px", fill: "#0f0" })
+    this.add
+      .text(centerX, centerY - 80, "Start", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", () => this.startGame());
 
-    this.add.text(centerX, centerY - 10, "For improvements please Donate!", { fontSize: "18px", fill: "#fff" })
+    this.add
+      .text(centerX, centerY - 10, "For improvements please Donate!", { fontSize: "18px", fill: "#fff" })
       .setOrigin(0.5);
 
+    // Donate button
     if (!isGuest) {
-      this.add.text(centerX, centerY + 35, "Donate", { fontSize: "22px", fill: "#0ff" })
+      this.add
+        .text(centerX, centerY + 35, "Donate", { fontSize: "22px", fill: "#0ff" })
         .setOrigin(0.5)
         .setInteractive()
         .on("pointerdown", () => this.scene.start("Market"));
@@ -120,44 +159,35 @@ class MainMenu extends Phaser.Scene {
       this.add.text(centerX, centerY + 35, "Donate requires Pi login", { fontSize: "16px", fill: "#bbb" })
         .setOrigin(0.5);
 
-      this.add.text(centerX, centerY + 70, "Login with Pi", { fontSize: "18px", fill: "#0ff" })
+      this.add
+        .text(centerX, centerY + 70, "Login with Pi", { fontSize: "18px", fill: "#0ff" })
         .setOrigin(0.5)
         .setInteractive()
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
-    // ================= TESTNET A2U CLAIM BUTTON (ADDED) =================
-    this.add.text(centerX, centerY + 105, "Claim 1π (Testnet)", {
-      fontSize: "18px",
-      fill: "#ff0"
-    })
+    // ===== TESTNET CLAIM BUTTON =====
+    // (Only meaningful for Pi users; guest will be prompted to login)
+    this.add
+      .text(centerX, centerY + 105, "Claim 1π (Testnet)", { fontSize: "18px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", async () => {
         try {
-          if (!window.piApp?.user || !window.piApp?.accessToken) {
-            await window.piApp.authenticate(["username"]);
+          if (isGuest) {
+            alert("Please login with Pi first.");
+            this.scene.start("Auth");
+            return;
           }
 
-          const res = await fetch(
-           "https://pi-payment-backend.sdswat93.workers.dev/api/claim",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ accessToken: window.piApp.accessToken })
-            }
-          );
-
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Claim failed");
-
-          alert("✅ 1π sent to your wallet (testnet)");
+          const result = await claimTestnetPi();
+          alert(`✅ Claimed 1π (testnet)\nPayment: ${result.paymentId || ""}`);
         } catch (e) {
           alert("❌ " + (e?.message || e));
         }
       });
-    // ===================================================================
 
+    // Saved stats
     this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
   }
@@ -170,7 +200,7 @@ class MainMenu extends Phaser.Scene {
   }
 }
 
-// ====== MARKET ======
+// ====== MARKET (DONATE) ======
 class Market extends Phaser.Scene {
   constructor() {
     super({ key: "Market" });
@@ -192,6 +222,17 @@ class Market extends Phaser.Scene {
     this.makeButton(centerX,       centerY - 60, "10π", () => this.donate(10));
     this.makeButton(centerX + 140, centerY - 60, "100π", () => this.donate(100));
 
+    this.makeButton(centerX, centerY + 5, "Custom", () => {
+      const choice = prompt("Enter donation amount in Pi (e.g. 1, 10, 100):", "1");
+      if (choice === null) return;
+      const amount = Number(choice);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        this.paymentStatus.setText("Invalid amount.");
+        return;
+      }
+      this.donate(amount);
+    });
+
     this.paymentStatus = this.add.text(centerX, centerY + 70, "", {
       fontSize: "16px",
       fill: "#fff",
@@ -212,20 +253,27 @@ class Market extends Phaser.Scene {
       .on("pointerdown", cb);
   }
 
-  donate(amount) {
-    this.paymentStatus.setText(`Creating donation (${amount}π)...`);
+  async donate(amount) {
+    try {
+      this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
-    window.piApp.createPayment(
-      {
-        amount,
-        memo: "Ball10 Donation",
-        metadata: { kind: "donation", amount }
-      },
-      {
-        onStatus: (m) => this.paymentStatus.setText(m),
-        onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
-      }
-    ).catch(() => {});
+      // Ensure logged in (accessToken + user)
+      await ensurePiLogin();
+
+      window.piApp.createPayment(
+        {
+          amount,
+          memo: "Ball10 Donation",
+          metadata: { kind: "donation", amount }
+        },
+        {
+          onStatus: (m) => this.paymentStatus.setText(m),
+          onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
+        }
+      ).catch(() => {});
+    } catch (e) {
+      this.paymentStatus.setText(`Donation failed: ${e?.message || e}`);
+    }
   }
 }
 
@@ -254,6 +302,7 @@ class PlayGame extends Phaser.Scene {
       loop: true
     });
 
+    // ESC pause
     this.isPaused = false;
     this.pauseOverlay = null;
     this.input.keyboard.on("keydown-ESC", () => this.togglePause());
@@ -351,6 +400,7 @@ class PlayGame extends Phaser.Scene {
     this.physics.pause();
     this.balloons.clear(true, true);
 
+    // persist high score
     highScore = Math.max(highScore, score);
     saveProgress();
 
