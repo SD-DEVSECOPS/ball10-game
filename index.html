@@ -8,39 +8,6 @@
     body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background:#222; }
     canvas { display:block; margin:0 auto; }
 
-    #loading-screen{
-      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      color:#fff; font-size:24px; background:rgba(0,0,0,.6); z-index:9999;
-    }
-
-    .pi-auth-container{
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      z-index: 10000;
-      background: rgba(0,0,0,0.75);
-      padding: 12px;
-      border-radius: 10px;
-      color: white;
-      text-align: center;
-      display:none; /* sadece MainMenu'de gösterilecek */
-      min-width: 190px;
-    }
-
-    .pi-button{
-      background:#14C993; color:#fff; border:none; padding:10px 14px;
-      border-radius:6px; cursor:pointer; font-size:14px; transition:.2s;
-      width: 100%;
-    }
-    .pi-button:hover{ background:#12B082; }
-
-    .pi-mini{
-      margin-top: 8px;
-      font-size: 12px;
-      opacity: .9;
-      word-break: break-word;
-    }
-
     .pi-alert{
       position: fixed;
       top: 20px;
@@ -56,35 +23,19 @@
   </style>
 </head>
 <body>
-  <div class="pi-auth-container" id="pi-auth-container">
-    <button id="pi-auth-button" class="pi-button">Login with Pi</button>
-    <div id="pi-user-info" class="pi-mini"></div>
-  </div>
-
-  <div id="loading-screen">Loading Game...</div>
-
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
   <script src="https://sdk.minepi.com/pi-sdk.js"></script>
 
   <script>
-    // TEST modundayız: sandbox true
-    const IS_SANDBOX = true;
-
-    // Pi SDK init
+    // You said: we are in test environment (not prod)
     Pi.init({
       version: "2.0",
-      sandbox: IS_SANDBOX,
+      sandbox: true,
       allowedDomains: [location.hostname]
     });
   </script>
 
   <script src="app.js"></script>
   <script src="game.js"></script>
-
-  <script>
-    window.onload = () => {
-      document.getElementById("loading-screen").style.display = "none";
-    };
-  </script>
 </body>
 </html>
