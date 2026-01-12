@@ -23,8 +23,8 @@
       border-radius: 10px;
       color: white;
       text-align: center;
-      display:none; /* default hidden; shown only in MainMenu */
-      min-width: 180px;
+      display:none; /* sadece MainMenu'de gösterilecek */
+      min-width: 190px;
     }
 
     .pi-button{
@@ -67,14 +67,14 @@
   <script src="https://sdk.minepi.com/pi-sdk.js"></script>
 
   <script>
-    // sandbox sadece localhost’ta true olsun
-    const IS_SANDBOX = (location.hostname === "localhost" || location.hostname === "127.0.0.1");
+    // TEST modundayız: sandbox true
+    const IS_SANDBOX = true;
 
     // Pi SDK init
     Pi.init({
       version: "2.0",
       sandbox: IS_SANDBOX,
-      allowedDomains: [location.hostname] // ball10-game.pages.dev gibi
+      allowedDomains: [location.hostname]
     });
   </script>
 
