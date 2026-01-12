@@ -50,7 +50,6 @@ class Auth extends Phaser.Scene {
       align: "center"
     }).setOrigin(0.5);
 
-    // Login with Pi (tap required)
     this.add.text(centerX, centerY, "Login with Pi", { fontSize: "26px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -58,13 +57,7 @@ class Auth extends Phaser.Scene {
         this.status.setText("Authenticating with Pi...");
         try {
           isGuest = false;
-
-          // ✅ IMPORTANT: only request username on login
-          await Promise.race([
-            window.piApp.authenticate(["username"]),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
-          ]);
-
+          await window.piApp.authenticate(["username"]);
           loadProgress();
           this.scene.start("MainMenu");
         } catch (e) {
@@ -74,7 +67,6 @@ class Auth extends Phaser.Scene {
         }
       });
 
-    // Guest mode
     this.add.text(centerX, centerY + 60, "Continue as Guest", { fontSize: "20px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -84,7 +76,9 @@ class Auth extends Phaser.Scene {
         this.scene.start("MainMenu");
       });
 
-    this.add.text(centerX, centerY + 120,
+    this.add.text(
+      centerX,
+      centerY + 120,
       "Guest mode: Play only. Donations require Pi login.",
       { fontSize: "13px", fill: "#bbb", align: "center" }
     ).setOrigin(0.5);
@@ -93,7 +87,9 @@ class Auth extends Phaser.Scene {
 
 // ====== MAIN MENU ======
 class MainMenu extends Phaser.Scene {
-  constructor() { super({ key: "MainMenu" }); }
+  constructor() {
+    super({ key: "MainMenu" });
+  }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -130,6 +126,38 @@ class MainMenu extends Phaser.Scene {
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
+    // ================= TESTNET A2U CLAIM BUTTON (ADDED) =================
+    this.add.text(centerX, centerY + 105, "Claim 1π (Testnet)", {
+      fontSize: "18px",
+      fill: "#ff0"
+    })
+      .setOrigin(0.5)
+      .setInteractive()
+      .on("pointerdown", async () => {
+        try {
+          if (!window.piApp?.user || !window.piApp?.accessToken) {
+            await window.piApp.authenticate(["username"]);
+          }
+
+          const res = await fetch(
+            "https://WILL_BE_REPLACED_WITH_TESTNET_A2U_WORKER/api/claim",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ accessToken: window.piApp.accessToken })
+            }
+          );
+
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Claim failed");
+
+          alert("✅ 1π sent to your wallet (testnet)");
+        } catch (e) {
+          alert("❌ " + (e?.message || e));
+        }
+      });
+    // ===================================================================
+
     this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
   }
@@ -142,12 +170,17 @@ class MainMenu extends Phaser.Scene {
   }
 }
 
-// ====== MARKET (donation) ======
+// ====== MARKET ======
 class Market extends Phaser.Scene {
-  constructor() { super({ key: "Market" }); }
+  constructor() {
+    super({ key: "Market" });
+  }
 
   create() {
-    if (isGuest) { this.scene.start("MainMenu"); return; }
+    if (isGuest) {
+      this.scene.start("MainMenu");
+      return;
+    }
 
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
@@ -155,20 +188,9 @@ class Market extends Phaser.Scene {
     this.add.text(centerX, centerY - 160, "Donate ❤️", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY - 120, "Choose an amount", { fontSize: "18px", fill: "#ddd" }).setOrigin(0.5);
 
-    this.makeButton(centerX - 140, centerY - 60, "1π",  () => this.donate(1));
+    this.makeButton(centerX - 140, centerY - 60, "1π", () => this.donate(1));
     this.makeButton(centerX,       centerY - 60, "10π", () => this.donate(10));
-    this.makeButton(centerX + 140, centerY - 60, "100π",() => this.donate(100));
-
-    this.makeButton(centerX, centerY + 5, "Custom", () => {
-      const choice = prompt("Enter donation amount in Pi (e.g. 1, 10, 100):", "1");
-      if (choice === null) return;
-      const amount = Number(choice);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        this.paymentStatus.setText("Invalid amount.");
-        return;
-      }
-      this.donate(amount);
-    });
+    this.makeButton(centerX + 140, centerY - 60, "100π", () => this.donate(100));
 
     this.paymentStatus = this.add.text(centerX, centerY + 70, "", {
       fontSize: "16px",
@@ -190,19 +212,15 @@ class Market extends Phaser.Scene {
       .on("pointerdown", cb);
   }
 
-  async donate(amount) {
+  donate(amount) {
     this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
-    try {
-      // ✅ IMPORTANT: request payments permission only now
-      await window.piApp.ensurePaymentsPermission();
-    } catch (e) {
-      this.paymentStatus.setText(`Payments permission failed: ${e?.message || e}`);
-      return;
-    }
-
     window.piApp.createPayment(
-      { amount, memo: "Ball10 Donation", metadata: { kind: "donation", amount } },
+      {
+        amount,
+        memo: "Ball10 Donation",
+        metadata: { kind: "donation", amount }
+      },
       {
         onStatus: (m) => this.paymentStatus.setText(m),
         onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
@@ -211,9 +229,11 @@ class Market extends Phaser.Scene {
   }
 }
 
-// ====== PLAY GAME (unchanged except saveProgress calls already in your file) ======
+// ====== PLAY GAME (ORIGINAL LOGIC) ======
 class PlayGame extends Phaser.Scene {
-  constructor() { super({ key: "PlayGame" }); }
+  constructor() {
+    super({ key: "PlayGame" });
+  }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -241,7 +261,9 @@ class PlayGame extends Phaser.Scene {
 
   togglePause() {
     if (gameOverFlag) return;
+
     this.isPaused = !this.isPaused;
+
     if (this.isPaused) {
       this.physics.pause();
       this.showPauseMenu();
@@ -316,6 +338,7 @@ class PlayGame extends Phaser.Scene {
 
   update() {
     if (gameOverFlag || this.isPaused) return;
+
     this.balloons.children.iterate(balloon => {
       if (balloon?.y > this.cameras.main.height && balloon.texture.key !== "redBalloon") {
         this.gameOver();
@@ -331,18 +354,19 @@ class PlayGame extends Phaser.Scene {
     highScore = Math.max(highScore, score);
     saveProgress();
 
-    const centerX = this.cameras.main.width / 2;
-    const centerY = this.cameras.main.height / 2;
+    const cx = this.cameras.main.width / 2;
+    const cy = this.cameras.main.height / 2;
 
     this.add.text(
-      centerX, centerY - 50,
+      cx,
+      cy - 50,
       `Game Over\nScore: ${score}\nHigh Score: ${highScore}\nBalance: ${balance}`,
       { fontSize: "20px", fill: "#fff", align: "center" }
     ).setOrigin(0.5);
 
-    this.createButton("Retry", centerY, () => this.restartGame());
-    this.createButton("Continue (10 points)", centerY + 50, () => this.continueGame());
-    this.createButton("Main Menu", centerY + 100, () => this.returnToMenu());
+    this.createButton("Retry", cy, () => this.restartGame());
+    this.createButton("Continue (10 points)", cy + 50, () => this.continueGame());
+    this.createButton("Main Menu", cy + 100, () => this.returnToMenu());
   }
 
   createButton(text, y, callback) {
@@ -376,13 +400,17 @@ class PlayGame extends Phaser.Scene {
   }
 }
 
+// ====== GAME CONFIG ======
 const config = {
   type: Phaser.AUTO,
   width: window.innerWidth,
   height: window.innerHeight,
   backgroundColor: "#222",
   scene: [Auth, MainMenu, Market, PlayGame],
-  physics: { default: "arcade", arcade: { debug: false } }
+  physics: {
+    default: "arcade",
+    arcade: { debug: false }
+  }
 };
 
 const game = new Phaser.Game(config);
