@@ -1,7 +1,7 @@
 (function () {
   const WORKER_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
-  // ✅ TESTNET build flag (worker + app.js will use it)
+  // ✅ This controls env in BOTH frontend + worker
   const PI_ENV = "testnet";
   window.BALL10_PI_ENV = PI_ENV;
 
@@ -34,7 +34,7 @@
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-PI-ENV": PI_ENV, // ✅ keep
+        "X-PI-ENV": PI_ENV,
       },
       body: JSON.stringify({ accessToken: window.piApp.accessToken }),
     });
@@ -45,7 +45,6 @@
       const det = stringifyDetails(data.details);
       throw new Error(det ? `${msg}\n\nDetails: ${det}` : msg);
     }
-
     return data;
   }
 
