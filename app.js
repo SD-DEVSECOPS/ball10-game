@@ -10,15 +10,13 @@ class PiApp {
     this.hasPaymentsPermission = false;
   }
 
-  // ✅ Default login should be easy: username only
-  // Payments permission is requested only when user taps Donate.
+  // ✅ Default login: username only
   async authenticate(scopes = ["username"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
 
     const auth = await Pi.authenticate(scopes, this.onIncompletePaymentFound.bind(this));
 
-    // Normalize user (some SDK versions may vary)
     const rawUser = auth?.user || null;
     const uid = rawUser?.uid || rawUser?.pi_uid || null;
     const username = rawUser?.username || null;
@@ -29,7 +27,6 @@ class PiApp {
     if (!this.accessToken) throw new Error("Authentication failed (missing accessToken).");
     if (!this.user || !this.user.uid) throw new Error("Authentication failed (missing uid).");
 
-    // Track if we requested payments in this login
     if (Array.isArray(scopes) && scopes.includes("payments")) {
       this.hasPaymentsPermission = true;
     }
@@ -39,7 +36,6 @@ class PiApp {
 
   async ensurePaymentsPermission() {
     if (this.hasPaymentsPermission) return true;
-    // ✅ Ask for payments ONLY when needed
     await this.authenticate(["username", "payments"]);
     return true;
   }
