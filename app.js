@@ -20,19 +20,11 @@ class PiApp {
   }
 
   setupEventListeners() {
-    // Market -> payment event
     document.addEventListener("paymentInitiated", (e) => this.createPayment(e.detail));
 
-    // Scene değişince UI kontrolü
     document.addEventListener("sceneChanged", (e) => {
       this.onSceneChanged(e.detail?.sceneKey);
     });
-  }
-
-  isPiBrowser() {
-    // Pi Browser user-agent genelde "PiBrowser" içerir
-    const ua = navigator.userAgent || "";
-    return ua.toLowerCase().includes("pibrowser");
   }
 
   onSceneChanged(sceneKey) {
@@ -64,11 +56,8 @@ class PiApp {
         return;
       }
 
-      // Pi Browser dışında açılırsa genelde authenticate çalışmaz
-      if (!this.isPiBrowser()) {
-        this.showError("Pi login sadece Pi Browser’da çalışır. Uygulamayı Pi Browser’dan aç.");
-        return;
-      }
+      // NOT: Pi Browser kontrolünü kaldırdık.
+      // Pi Browser değilse authenticate zaten hata verir, onu yakalayıp mesaj basacağız.
 
       const scopes = ["username", "payments"];
       const authResult = await Pi.authenticate(scopes, this.handleIncompletePayment.bind(this));
@@ -82,7 +71,18 @@ class PiApp {
       // login olunca MainMenu’de butonu sakla
       this.onSceneChanged("MainMenu");
     } catch (error) {
-      this.showError(`Authentication failed: ${error?.message || error}`);
+      // Buraya düşüyorsa genelde:
+      // - Pi Browser dışında açılmıştır
+      // - Pi SDK init/allowedDomains sıkıntısı vardır
+      // - Sandbox/prod ortam uyuşmazlığı vardır
+      const msg = error?.message || String(error);
+
+      // Daha yardımcı mesaj:
+      if (msg.toLowerCase().includes("not allowed") || msg.toLowerCase().includes("domain")) {
+        this.showError("Domain izin hatası: Pi.init allowedDomains ayarı bu domaini içermiyor.");
+      } else {
+        this.showError(`Authentication failed: ${msg}`);
+      }
     }
   }
 
@@ -92,14 +92,12 @@ class PiApp {
       return;
     }
 
-    // paymentData closure içinde kalacak -> paymentId geldiğinde map’e yazacağız
     const callbacks = {
       onReadyForServerApproval: (paymentId) => {
         this.paymentMetaById[paymentId] = paymentData?.metadata || {};
         return this.handleApproval(paymentId);
       },
       onReadyForServerCompletion: (paymentId, txid) => {
-        // completion aşamasında da garantiye al
         this.paymentMetaById[paymentId] = this.paymentMetaById[paymentId] || (paymentData?.metadata || {});
         return this.handleCompletion(paymentId, txid);
       },
@@ -137,7 +135,6 @@ class PiApp {
       const meta = this.paymentMetaById[paymentId] || {};
       const kind = meta?.kind || meta?.product || "unknown";
 
-      // Balloon purchase => +1000 points
       if (kind === "balloon_points") {
         window.balance = (window.balance ?? 0) + 1000;
         this.showMessage("1000 Balloon Points Added!");
@@ -146,7 +143,6 @@ class PiApp {
           window.game.scene.getScene("Market").scene.restart();
         }
       } else if (kind === "donation") {
-        // Donation => sadece teşekkür
         const amt = meta?.amount ?? "";
         this.showMessage(`Thanks for the donation ${amt ? "(" + amt + "π)" : ""} ❤️`);
       } else {
