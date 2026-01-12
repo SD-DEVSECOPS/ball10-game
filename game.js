@@ -9,9 +9,6 @@ let balloonSpeed = 150;
 // ====== MODE + STORAGE (minimal) ======
 let isGuest = false;
 
-// ====== WORKER BASE ======
-const WORKER_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
-
 function storageKey(name) {
   const uid = window.piApp?.user?.uid;
   const prefix = uid ? `ball10_${uid}` : "ball10_guest";
@@ -33,50 +30,6 @@ function saveProgress() {
     localStorage.setItem(storageKey("highScore"), String(highScore));
     localStorage.setItem(storageKey("balance"), String(balance));
   } catch (_) {}
-}
-
-// ====== Helpers ======
-async function ensurePiLogin() {
-  if (!window.piApp) throw new Error("piApp missing. app.js not loaded.");
-
-  // ✅ Login with username ONLY (no payments scope here)
-  if (!window.piApp.user?.uid || !window.piApp.accessToken) {
-    await window.piApp.authenticate(["username"]);
-  }
-
-  if (!window.piApp.user?.uid) throw new Error("Auth returned no uid.");
-  if (!window.piApp.accessToken) throw new Error("Auth returned no accessToken.");
-  return true;
-}
-
-function stringifyDetails(details) {
-  try {
-    if (details === undefined || details === null) return "";
-    if (typeof details === "string") return details;
-    return JSON.stringify(details);
-  } catch {
-    return String(details);
-  }
-}
-
-async function claimTestnet1Pi() {
-  await ensurePiLogin();
-
-  const res = await fetch(`${WORKER_BASE}/api/claim`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accessToken: window.piApp.accessToken })
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const msg = data.error || "Claim failed";
-    const det = stringifyDetails(data.details);
-    throw new Error(det ? `${msg}\n\nDetails: ${det}` : msg);
-  }
-
-  return data;
 }
 
 // ====== AUTH SCENE (Pi login or Guest) ======
@@ -107,7 +60,7 @@ class Auth extends Phaser.Scene {
           isGuest = false;
 
           await Promise.race([
-            ensurePiLogin(),
+            window.Ball10Payments.ensurePiLogin(),
             new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
           ]);
 
@@ -192,7 +145,7 @@ class MainMenu extends Phaser.Scene {
             this.scene.start("Auth");
             return;
           }
-          const result = await claimTestnet1Pi();
+          const result = await window.Ball10Payments.claimTestnet1Pi();
           alert(`✅ Claim success!\nPayment: ${result.paymentId || ""}`);
         } catch (e) {
           alert("❌ " + (e?.message || e));
@@ -268,23 +221,10 @@ class Market extends Phaser.Scene {
     try {
       this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
-      // ✅ Make sure user is logged in
-      await ensurePiLogin();
-
-      // ✅ Ask for payments permission only here
-      await window.piApp.ensurePaymentsPermission();
-
-      window.piApp.createPayment(
-        {
-          amount,
-          memo: "Ball10 Donation",
-          metadata: { kind: "donation", amount }
-        },
-        {
-          onStatus: (m) => this.paymentStatus.setText(m),
-          onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
-        }
-      ).catch(() => {});
+      await window.Ball10Payments.donatePi(amount, {
+        onStatus: (m) => this.paymentStatus.setText(m),
+        onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
+      });
     } catch (e) {
       this.paymentStatus.setText(`Donation failed: ${e?.message || e}`);
     }
