@@ -3,12 +3,14 @@ class PiApp {
     this.user = null;
     this.accessToken = null;
 
+    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
     this.hasPaymentsPermission = false;
   }
 
+  // Default login: username only
   async authenticate(scopes = ["username"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
@@ -55,10 +57,12 @@ class PiApp {
           uiCallbacks?.onStatus?.("Approved. Waiting for completion...");
         } catch (e) {
           console.error("Server approval failed:", e);
-          uiCallbacks?.onError?.(new Error(
-            `Server approval failed, but your wallet payment may still complete.\n${e?.message || e}`
-          ));
-          // do not throw
+          uiCallbacks?.onError?.(
+            new Error(
+              `Server approval failed, but your wallet payment may still complete.\n${e?.message || e}`
+            )
+          );
+          // ✅ do NOT throw
         }
       },
 
@@ -69,18 +73,25 @@ class PiApp {
           uiCallbacks?.onStatus?.("Donation completed ✅");
         } catch (e) {
           console.error("Server completion failed:", e);
-          uiCallbacks?.onError?.(new Error(
-            `Server completion failed, but your wallet payment may still be completed.\n${e?.message || e}`
-          ));
-          // do not throw
+          uiCallbacks?.onError?.(
+            new Error(
+              `Server completion failed, but your wallet payment may still be completed.\n${e?.message || e}`
+            )
+          );
+          // ✅ do NOT throw
         }
       },
 
       onCancel: () => uiCallbacks?.onStatus?.("Donation cancelled."),
-      onError: (error) => uiCallbacks?.onError?.(error)
+      onError: (error) => uiCallbacks?.onError?.(error),
     };
 
-    return Pi.createPayment(paymentData, callbacks)
+    // ✅ IMPORTANT FIX:
+    // Some Pi Browser versions return a non-Promise while still opening the payment UI.
+    // Promise.resolve() makes both Promise + non-Promise cases work.
+    const maybePromise = Pi.createPayment(paymentData, callbacks);
+
+    return Promise.resolve(maybePromise)
       .then((payment) => {
         uiCallbacks?.onStatus?.("Please confirm in Pi Wallet...");
         return payment;
@@ -91,17 +102,11 @@ class PiApp {
       });
   }
 
-  _envHeader() {
-    // set by pi-payments.js in testnet branch
-    const env = window.BALL10_PI_ENV || "";
-    return env ? { "X-PI-ENV": env } : {};
-  }
-
   async approvePayment(paymentId) {
     const res = await fetch(`${this.API_BASE}/api/approve-payment`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...this._envHeader() },
-      body: JSON.stringify({ paymentId })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId }),
     });
 
     if (!res.ok) {
@@ -114,8 +119,8 @@ class PiApp {
   async completePayment(paymentId, txid) {
     const res = await fetch(`${this.API_BASE}/api/complete-payment`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...this._envHeader() },
-      body: JSON.stringify({ paymentId, txid })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId, txid }),
     });
 
     if (!res.ok) {
