@@ -32,7 +32,7 @@ function saveProgress() {
   } catch (_) {}
 }
 
-// ====== NEW SCENE: AUTH (Pi login or Guest) ======
+// ====== AUTH SCENE ======
 class Auth extends Phaser.Scene {
   constructor() {
     super({ key: "Auth" });
@@ -50,7 +50,7 @@ class Auth extends Phaser.Scene {
       align: "center"
     }).setOrigin(0.5);
 
-    // Login with Pi (must be user tap)
+    // Login with Pi (tap required)
     this.add.text(centerX, centerY, "Login with Pi", { fontSize: "26px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -58,10 +58,13 @@ class Auth extends Phaser.Scene {
         this.status.setText("Authenticating with Pi...");
         try {
           isGuest = false;
+
+          // ✅ IMPORTANT: only request username on login
           await Promise.race([
-            window.piApp.authenticate(),
+            window.piApp.authenticate(["username"]),
             new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
           ]);
+
           loadProgress();
           this.scene.start("MainMenu");
         } catch (e) {
@@ -77,7 +80,7 @@ class Auth extends Phaser.Scene {
       .setInteractive()
       .on("pointerdown", () => {
         isGuest = true;
-        loadProgress(); // guest progress saved separately
+        loadProgress();
         this.scene.start("MainMenu");
       });
 
@@ -88,11 +91,9 @@ class Auth extends Phaser.Scene {
   }
 }
 
-// ====== MAIN MENU (based on your original) ======
+// ====== MAIN MENU ======
 class MainMenu extends Phaser.Scene {
-  constructor() {
-    super({ key: "MainMenu" });
-  }
+  constructor() { super({ key: "MainMenu" }); }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -129,9 +130,6 @@ class MainMenu extends Phaser.Scene {
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
-    this.add.text(centerX, centerY + 120, "Market Coming soon!", { fontSize: "16px", fill: "#bbb" }).setOrigin(0.5);
-
-    // Show saved stats (client-side)
     this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
   }
@@ -144,17 +142,12 @@ class MainMenu extends Phaser.Scene {
   }
 }
 
-// ====== MARKET (repurposed: donation only, no buy coins) ======
+// ====== MARKET (donation) ======
 class Market extends Phaser.Scene {
-  constructor() {
-    super({ key: "Market" });
-  }
+  constructor() { super({ key: "Market" }); }
 
   create() {
-    if (isGuest) {
-      this.scene.start("MainMenu");
-      return;
-    }
+    if (isGuest) { this.scene.start("MainMenu"); return; }
 
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
@@ -162,10 +155,9 @@ class Market extends Phaser.Scene {
     this.add.text(centerX, centerY - 160, "Donate ❤️", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY - 120, "Choose an amount", { fontSize: "18px", fill: "#ddd" }).setOrigin(0.5);
 
-    // 1 / 10 / 100 / custom
-    this.makeButton(centerX - 140, centerY - 60, "1π", () => this.donate(1));
+    this.makeButton(centerX - 140, centerY - 60, "1π",  () => this.donate(1));
     this.makeButton(centerX,       centerY - 60, "10π", () => this.donate(10));
-    this.makeButton(centerX + 140, centerY - 60, "100π", () => this.donate(100));
+    this.makeButton(centerX + 140, centerY - 60, "100π",() => this.donate(100));
 
     this.makeButton(centerX, centerY + 5, "Custom", () => {
       const choice = prompt("Enter donation amount in Pi (e.g. 1, 10, 100):", "1");
@@ -198,15 +190,19 @@ class Market extends Phaser.Scene {
       .on("pointerdown", cb);
   }
 
-  donate(amount) {
+  async donate(amount) {
     this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
+    try {
+      // ✅ IMPORTANT: request payments permission only now
+      await window.piApp.ensurePaymentsPermission();
+    } catch (e) {
+      this.paymentStatus.setText(`Payments permission failed: ${e?.message || e}`);
+      return;
+    }
+
     window.piApp.createPayment(
-      {
-        amount,
-        memo: "Ball10 Donation",
-        metadata: { kind: "donation", amount }
-      },
+      { amount, memo: "Ball10 Donation", metadata: { kind: "donation", amount } },
       {
         onStatus: (m) => this.paymentStatus.setText(m),
         onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
@@ -215,11 +211,9 @@ class Market extends Phaser.Scene {
   }
 }
 
-// ====== PLAY GAME (YOUR ORIGINAL LOGIC, kept) ======
+// ====== PLAY GAME (unchanged except saveProgress calls already in your file) ======
 class PlayGame extends Phaser.Scene {
-  constructor() {
-    super({ key: "PlayGame" });
-  }
+  constructor() { super({ key: "PlayGame" }); }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -240,7 +234,6 @@ class PlayGame extends Phaser.Scene {
       loop: true
     });
 
-    // ESC pause
     this.isPaused = false;
     this.pauseOverlay = null;
     this.input.keyboard.on("keydown-ESC", () => this.togglePause());
@@ -248,9 +241,7 @@ class PlayGame extends Phaser.Scene {
 
   togglePause() {
     if (gameOverFlag) return;
-
     this.isPaused = !this.isPaused;
-
     if (this.isPaused) {
       this.physics.pause();
       this.showPauseMenu();
@@ -325,7 +316,6 @@ class PlayGame extends Phaser.Scene {
 
   update() {
     if (gameOverFlag || this.isPaused) return;
-
     this.balloons.children.iterate(balloon => {
       if (balloon?.y > this.cameras.main.height && balloon.texture.key !== "redBalloon") {
         this.gameOver();
@@ -338,7 +328,6 @@ class PlayGame extends Phaser.Scene {
     this.physics.pause();
     this.balloons.clear(true, true);
 
-    // ✅ persist high score
     highScore = Math.max(highScore, score);
     saveProgress();
 
@@ -346,8 +335,7 @@ class PlayGame extends Phaser.Scene {
     const centerY = this.cameras.main.height / 2;
 
     this.add.text(
-      centerX,
-      centerY - 50,
+      centerX, centerY - 50,
       `Game Over\nScore: ${score}\nHigh Score: ${highScore}\nBalance: ${balance}`,
       { fontSize: "20px", fill: "#fff", align: "center" }
     ).setOrigin(0.5);
@@ -393,12 +381,8 @@ const config = {
   width: window.innerWidth,
   height: window.innerHeight,
   backgroundColor: "#222",
-  // ✅ Start at Auth scene (Pi login or Guest)
   scene: [Auth, MainMenu, Market, PlayGame],
-  physics: {
-    default: "arcade",
-    arcade: { debug: false }
-  }
+  physics: { default: "arcade", arcade: { debug: false } }
 };
 
 const game = new Phaser.Game(config);
