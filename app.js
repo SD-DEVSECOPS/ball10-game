@@ -6,6 +6,9 @@ class PiApp {
     // Cloudflare Worker base URL (senin worker)
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
+    // paymentId -> metadata map
+    this.paymentMetaById = {};
+
     this.setupAuthButton();
     this.setupEventListeners();
     this.refreshAuthUI();
@@ -26,15 +29,20 @@ class PiApp {
     });
   }
 
+  isPiBrowser() {
+    // Pi Browser user-agent genelde "PiBrowser" içerir
+    const ua = navigator.userAgent || "";
+    return ua.toLowerCase().includes("pibrowser");
+  }
+
   onSceneChanged(sceneKey) {
-    // Login butonu sadece MainMenu’de ve user yoksa görünsün
     const container = document.getElementById("pi-auth-container");
     if (!container) return;
 
+    // Login butonu sadece MainMenu’de ve user yoksa görünür
     const shouldShow = (sceneKey === "MainMenu" && !this.user);
     container.style.display = shouldShow ? "block" : "none";
 
-    // user varsa MainMenu’de bile göstermiyoruz (isteğin buydu)
     if (this.user) container.style.display = "none";
   }
 
@@ -51,7 +59,17 @@ class PiApp {
 
   async handleAuth() {
     try {
-      // Senin dediğin gibi: client-side login yeterli
+      if (typeof Pi === "undefined") {
+        this.showError("Pi SDK yüklenmedi. Sayfayı yenile.");
+        return;
+      }
+
+      // Pi Browser dışında açılırsa genelde authenticate çalışmaz
+      if (!this.isPiBrowser()) {
+        this.showError("Pi login sadece Pi Browser’da çalışır. Uygulamayı Pi Browser’dan aç.");
+        return;
+      }
+
       const scopes = ["username", "payments"];
       const authResult = await Pi.authenticate(scopes, this.handleIncompletePayment.bind(this));
 
@@ -69,9 +87,22 @@ class PiApp {
   }
 
   createPayment(paymentData) {
+    if (typeof Pi === "undefined") {
+      this.showError("Pi SDK yüklenmedi.");
+      return;
+    }
+
+    // paymentData closure içinde kalacak -> paymentId geldiğinde map’e yazacağız
     const callbacks = {
-      onReadyForServerApproval: (paymentId) => this.handleApproval(paymentId),
-      onReadyForServerCompletion: (paymentId, txid) => this.handleCompletion(paymentId, txid),
+      onReadyForServerApproval: (paymentId) => {
+        this.paymentMetaById[paymentId] = paymentData?.metadata || {};
+        return this.handleApproval(paymentId);
+      },
+      onReadyForServerCompletion: (paymentId, txid) => {
+        // completion aşamasında da garantiye al
+        this.paymentMetaById[paymentId] = this.paymentMetaById[paymentId] || (paymentData?.metadata || {});
+        return this.handleCompletion(paymentId, txid);
+      },
       onCancel: (paymentId) => this.showMessage(`Payment ${paymentId} cancelled`),
       onError: (error) => this.showError(`Payment error: ${error?.message || error}`)
     };
@@ -103,15 +134,23 @@ class PiApp {
 
       if (!res.ok) throw new Error(await res.text());
 
-      // OYUN ÖDÜLÜ (senin logic)
-      // global balance var (game.js içinde)
-      window.balance = (window.balance ?? 0) + 1000;
+      const meta = this.paymentMetaById[paymentId] || {};
+      const kind = meta?.kind || meta?.product || "unknown";
 
-      this.showMessage("1000 Balloon Points Added!");
+      // Balloon purchase => +1000 points
+      if (kind === "balloon_points") {
+        window.balance = (window.balance ?? 0) + 1000;
+        this.showMessage("1000 Balloon Points Added!");
 
-      // Market açıksa refreshle
-      if (window.game?.scene?.isActive("Market")) {
-        window.game.scene.getScene("Market").scene.restart();
+        if (window.game?.scene?.isActive("Market")) {
+          window.game.scene.getScene("Market").scene.restart();
+        }
+      } else if (kind === "donation") {
+        // Donation => sadece teşekkür
+        const amt = meta?.amount ?? "";
+        this.showMessage(`Thanks for the donation ${amt ? "(" + amt + "π)" : ""} ❤️`);
+      } else {
+        this.showMessage("Payment completed ✅");
       }
     } catch (e) {
       this.showError(`Payment completion failed: ${e?.message || e}`);
@@ -119,7 +158,6 @@ class PiApp {
   }
 
   handleIncompletePayment(payment) {
-    // Basitçe completion dene
     this.showError("Found incomplete payment - attempting completion...");
     const txid = payment?.transaction?.txid || null;
     this.handleCompletion(payment.identifier, txid);
