@@ -1,10 +1,7 @@
-// pi-payments.js
-// All Pi login / payments / claim logic lives here.
-
 (function () {
   const WORKER_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
-  // ✅ This tells the Worker which PI_SERVER_KEY to use
+  // ✅ TESTNET build flag (worker + app.js will use it)
   const PI_ENV = "testnet";
   window.BALL10_PI_ENV = PI_ENV;
 
@@ -37,9 +34,9 @@
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-PI-ENV": PI_ENV
+        "X-PI-ENV": PI_ENV, // ✅ keep
       },
-      body: JSON.stringify({ accessToken: window.piApp.accessToken })
+      body: JSON.stringify({ accessToken: window.piApp.accessToken }),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -64,7 +61,7 @@
       {
         amount,
         memo: "Ball10 Donation",
-        metadata: { kind: "donation", amount }
+        metadata: { kind: "donation", amount },
       },
       uiCallbacks
     );
@@ -73,6 +70,6 @@
   window.Ball10Payments = {
     ensurePiLogin,
     claimTestnet1Pi,
-    donatePi
+    donatePi,
   };
 })();
