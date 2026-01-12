@@ -3,7 +3,6 @@ class PiApp {
     this.user = null;
     this.accessToken = null;
 
-    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
@@ -11,18 +10,16 @@ class PiApp {
   }
 
   getEnv() {
-    // testnet build sets this in pi-payments.js
     return window.BALL10_PI_ENV || "mainnet";
   }
 
-  getCommonHeaders() {
+  getHeaders() {
     return {
       "Content-Type": "application/json",
-      "X-PI-ENV": this.getEnv(), // ✅ REQUIRED for testnet switching
+      "X-PI-ENV": this.getEnv(),
     };
   }
 
-  // Default login: username only
   async authenticate(scopes = ["username"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
@@ -69,10 +66,7 @@ class PiApp {
           uiCallbacks?.onStatus?.("Approved. Waiting for completion...");
         } catch (e) {
           console.error("Server approval failed:", e);
-          uiCallbacks?.onError?.(
-            new Error(`Server approval failed.\n${e?.message || e}`)
-          );
-          // do NOT throw (keep wallet flow alive)
+          uiCallbacks?.onError?.(new Error(`Server approval failed.\n${e?.message || e}`));
         }
       },
 
@@ -83,10 +77,7 @@ class PiApp {
           uiCallbacks?.onStatus?.("Donation completed ✅");
         } catch (e) {
           console.error("Server completion failed:", e);
-          uiCallbacks?.onError?.(
-            new Error(`Server completion failed.\n${e?.message || e}`)
-          );
-          // do NOT throw
+          uiCallbacks?.onError?.(new Error(`Server completion failed.\n${e?.message || e}`));
         }
       },
 
@@ -108,14 +99,12 @@ class PiApp {
   }
 
   async approvePayment(paymentId) {
-    if (!this.accessToken) throw new Error("Missing accessToken (login required).");
-
     const res = await fetch(`${this.API_BASE}/api/approve-payment`, {
       method: "POST",
-      headers: this.getCommonHeaders(),
+      headers: this.getHeaders(),
       body: JSON.stringify({
         paymentId,
-        accessToken: this.accessToken, // ✅ important for worker verification
+        accessToken: this.accessToken || null, // worker can ignore if not needed
       }),
     });
 
@@ -127,15 +116,13 @@ class PiApp {
   }
 
   async completePayment(paymentId, txid) {
-    if (!this.accessToken) throw new Error("Missing accessToken (login required).");
-
     const res = await fetch(`${this.API_BASE}/api/complete-payment`, {
       method: "POST",
-      headers: this.getCommonHeaders(),
+      headers: this.getHeaders(),
       body: JSON.stringify({
         paymentId,
-        txid,
-        accessToken: this.accessToken, // ✅ important for worker verification
+        txid: txid || null,
+        accessToken: this.accessToken || null,
       }),
     });
 
