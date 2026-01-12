@@ -6,8 +6,11 @@ let poppedBalloons = 0;
 let gameOverFlag = false;
 let balloonSpeed = 150;
 
-// ====== NEW: MODE + STORAGE (minimal) ======
+// ====== MODE + STORAGE (minimal) ======
 let isGuest = false;
+
+// ====== WORKER BASE ======
+const WORKER_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
 function storageKey(name) {
   const uid = window.piApp?.user?.uid;
@@ -32,7 +35,32 @@ function saveProgress() {
   } catch (_) {}
 }
 
-// ====== NEW SCENE: AUTH (Pi login or Guest) ======
+// ====== Helpers ======
+async function ensurePiLogin() {
+  if (!window.piApp) throw new Error("piApp missing. app.js not loaded.");
+  // This uses your app.js authenticate() (should request username+payments by default)
+  if (!window.piApp.user?.uid || !window.piApp.accessToken) {
+    await window.piApp.authenticate();
+  }
+  if (!window.piApp.user?.uid) throw new Error("Auth returned no uid.");
+  return true;
+}
+
+async function claimTestnet1Pi() {
+  await ensurePiLogin();
+
+  const res = await fetch(`${WORKER_BASE}/api/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accessToken: window.piApp.accessToken })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Claim failed");
+  return data;
+}
+
+// ====== AUTH SCENE (Pi login or Guest) ======
 class Auth extends Phaser.Scene {
   constructor() {
     super({ key: "Auth" });
@@ -58,10 +86,12 @@ class Auth extends Phaser.Scene {
         this.status.setText("Authenticating with Pi...");
         try {
           isGuest = false;
+
           await Promise.race([
-            window.piApp.authenticate(), // ✅ default username+payments
+            ensurePiLogin(),
             new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
           ]);
+
           loadProgress();
           this.scene.start("MainMenu");
         } catch (e) {
@@ -77,18 +107,18 @@ class Auth extends Phaser.Scene {
       .setInteractive()
       .on("pointerdown", () => {
         isGuest = true;
-        loadProgress(); // guest progress saved separately
+        loadProgress();
         this.scene.start("MainMenu");
       });
 
     this.add.text(centerX, centerY + 120,
-      "Guest mode: Play only. Donations require Pi login.",
+      "Guest mode: Play only. Donations/Claim require Pi login.",
       { fontSize: "13px", fill: "#bbb", align: "center" }
     ).setOrigin(0.5);
   }
 }
 
-// ====== MAIN MENU (based on your original) ======
+// ====== MAIN MENU ======
 class MainMenu extends Phaser.Scene {
   constructor() {
     super({ key: "MainMenu" });
@@ -105,6 +135,10 @@ class MainMenu extends Phaser.Scene {
 
     const title = isGuest ? "Main Menu (Guest)" : "Main Menu";
     this.add.text(centerX, centerY - 140, title, { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
+
+    // ✅ Show username if logged in
+    const uname = window.piApp?.user?.username || "(not logged in)";
+    this.add.text(centerX, centerY - 110, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(centerX, centerY - 80, "Start", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5)
@@ -129,7 +163,7 @@ class MainMenu extends Phaser.Scene {
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
-    // ✅ TESTNET REQUIREMENT BUTTON: A2U claim 1π
+    // ✅ TESTNET A2U CLAIM BUTTON
     this.add.text(centerX, centerY + 105, "Claim 1π (Testnet)", { fontSize: "18px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -140,28 +174,13 @@ class MainMenu extends Phaser.Scene {
             this.scene.start("Auth");
             return;
           }
-
-          // make sure we have accessToken
-          await window.piApp.authenticate();
-
-          const res = await fetch("https://pi-payment-backend.sdswat93.workers.dev/api/claim", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ accessToken: window.piApp.accessToken })
-          });
-
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data.error || "Claim failed");
-
-          alert(`✅ Claim success! Payment: ${data.paymentId || ""}`);
+          const result = await claimTestnet1Pi();
+          alert(`✅ Claim success!\nPayment: ${result.paymentId || ""}`);
         } catch (e) {
           alert("❌ " + (e?.message || e));
         }
       });
 
-    this.add.text(centerX, centerY + 120, "Market Coming soon!", { fontSize: "16px", fill: "#bbb" }).setOrigin(0.5);
-
-    // Show saved stats (client-side)
     this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
   }
@@ -227,20 +246,27 @@ class Market extends Phaser.Scene {
       .on("pointerdown", cb);
   }
 
-  donate(amount) {
-    this.paymentStatus.setText(`Creating donation (${amount}π)...`);
+  async donate(amount) {
+    try {
+      this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
-    window.piApp.createPayment(
-      {
-        amount,
-        memo: "Ball10 Donation",
-        metadata: { kind: "donation", amount }
-      },
-      {
-        onStatus: (m) => this.paymentStatus.setText(m),
-        onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
-      }
-    ).catch(() => {});
+      // Ensure login + payments permission before createPayment
+      await ensurePiLogin();
+
+      window.piApp.createPayment(
+        {
+          amount,
+          memo: "Ball10 Donation",
+          metadata: { kind: "donation", amount }
+        },
+        {
+          onStatus: (m) => this.paymentStatus.setText(m),
+          onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
+        }
+      ).catch(() => {});
+    } catch (e) {
+      this.paymentStatus.setText(`Donation failed: ${e?.message || e}`);
+    }
   }
 }
 
