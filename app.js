@@ -12,13 +12,13 @@ class PiApp {
     this._authInFlight = null;
   }
 
-  // Called by game AuthGate scene
   ensureAuthenticated() {
     if (this.user && this.accessToken) return Promise.resolve({ user: this.user, accessToken: this.accessToken });
     if (this._authInFlight) return this._authInFlight;
 
-    this._authInFlight = this.authenticate()
-      .finally(() => { this._authInFlight = null; });
+    this._authInFlight = this.authenticate().finally(() => {
+      this._authInFlight = null;
+    });
 
     return this._authInFlight;
   }
@@ -28,8 +28,8 @@ class PiApp {
       throw new Error("Pi SDK is not loaded. Please refresh.");
     }
 
-    // Per the doc you pasted: empty scopes are fine and still returns accessToken + user
-    const scopes = [];
+    // IMPORTANT: payments scope is required for payments to work reliably
+    const scopes = ["username", "payments"];
 
     const auth = await Pi.authenticate(scopes, this.handleIncompletePaymentFound.bind(this));
 
@@ -43,25 +43,62 @@ class PiApp {
   }
 
   handleIncompletePaymentFound(payment) {
-    // You can optionally try to complete it; for now just log.
     console.log("Incomplete payment found:", payment);
   }
 
-  createPayment(paymentData) {
+  /**
+   * Starts a Pi payment and returns the payment promise.
+   * caller can .then/.catch to update UI.
+   */
+  createPayment(paymentData, uiCallbacks = {}) {
+    if (typeof Pi === "undefined") {
+      const err = new Error("Pi SDK is not loaded.");
+      uiCallbacks?.onError?.(err);
+      return Promise.reject(err);
+    }
+
     const callbacks = {
-      onReadyForServerApproval: (paymentId) => {
-        this.paymentMetaById[paymentId] = paymentData?.metadata || {};
-        return this.handleApproval(paymentId);
+      onReadyForServerApproval: async (paymentId) => {
+        try {
+          this.paymentMetaById[paymentId] = paymentData?.metadata || {};
+          uiCallbacks?.onStatus?.("Approving payment on server...");
+          await this.handleApproval(paymentId);
+          uiCallbacks?.onStatus?.("Approved. Waiting for completion...");
+        } catch (e) {
+          uiCallbacks?.onError?.(e);
+          throw e;
+        }
       },
-      onReadyForServerCompletion: (paymentId, txid) => {
-        this.paymentMetaById[paymentId] = this.paymentMetaById[paymentId] || (paymentData?.metadata || {});
-        return this.handleCompletion(paymentId, txid);
+      onReadyForServerCompletion: async (paymentId, txid) => {
+        try {
+          this.paymentMetaById[paymentId] =
+            this.paymentMetaById[paymentId] || (paymentData?.metadata || {});
+          uiCallbacks?.onStatus?.("Completing payment on server...");
+          await this.handleCompletion(paymentId, txid);
+          uiCallbacks?.onStatus?.("Payment completed ✅");
+        } catch (e) {
+          uiCallbacks?.onError?.(e);
+          throw e;
+        }
       },
-      onCancel: (paymentId) => this.showMessage(`Payment ${paymentId} was cancelled.`),
-      onError: (error) => this.showError(`Payment error: ${error?.message || error}`)
+      onCancel: (paymentId) => {
+        uiCallbacks?.onStatus?.(`Payment ${paymentId} was cancelled.`);
+      },
+      onError: (error) => {
+        uiCallbacks?.onError?.(error);
+      }
     };
 
-    Pi.createPayment(paymentData, callbacks);
+    // IMPORTANT: catch immediate createPayment errors
+    return Pi.createPayment(paymentData, callbacks)
+      .then((payment) => {
+        uiCallbacks?.onStatus?.("Payment created. Please confirm in Pi Wallet...");
+        return payment;
+      })
+      .catch((error) => {
+        uiCallbacks?.onError?.(error);
+        throw error;
+      });
   }
 
   async handleApproval(paymentId) {
