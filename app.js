@@ -3,14 +3,12 @@ class PiApp {
     this.user = null;
     this.accessToken = null;
 
-    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
     this.hasPaymentsPermission = false;
   }
 
-  // Default login: username only
   async authenticate(scopes = ["username"]) {
     const Pi = window.Pi;
     if (!Pi) throw new Error("Pi SDK is not loaded. Refresh the page.");
@@ -50,8 +48,6 @@ class PiApp {
 
     const callbacks = {
       onReadyForServerApproval: async (paymentId) => {
-        // ✅ IMPORTANT: do NOT throw here.
-        // If this throws, your UI shows "Donation failed" even if payment happens.
         try {
           this.paymentMetaById[paymentId] = paymentData?.metadata || {};
           uiCallbacks?.onStatus?.("Approving payment...");
@@ -62,12 +58,11 @@ class PiApp {
           uiCallbacks?.onError?.(new Error(
             `Server approval failed, but your wallet payment may still complete.\n${e?.message || e}`
           ));
-          // ✅ Do NOT throw
+          // do not throw
         }
       },
 
       onReadyForServerCompletion: async (paymentId, txid) => {
-        // ✅ IMPORTANT: do NOT throw here.
         try {
           uiCallbacks?.onStatus?.("Completing payment...");
           await this.completePayment(paymentId, txid);
@@ -77,16 +72,12 @@ class PiApp {
           uiCallbacks?.onError?.(new Error(
             `Server completion failed, but your wallet payment may still be completed.\n${e?.message || e}`
           ));
-          // ✅ Do NOT throw
+          // do not throw
         }
       },
 
       onCancel: () => uiCallbacks?.onStatus?.("Donation cancelled."),
-
-      onError: (error) => {
-        // Pi SDK-level error (user cancels, etc.)
-        uiCallbacks?.onError?.(error);
-      }
+      onError: (error) => uiCallbacks?.onError?.(error)
     };
 
     return Pi.createPayment(paymentData, callbacks)
@@ -95,16 +86,21 @@ class PiApp {
         return payment;
       })
       .catch((error) => {
-        // If Pi SDK itself fails before wallet step
         uiCallbacks?.onError?.(error);
         throw error;
       });
   }
 
+  _envHeader() {
+    // set by pi-payments.js in testnet branch
+    const env = window.BALL10_PI_ENV || "";
+    return env ? { "X-PI-ENV": env } : {};
+  }
+
   async approvePayment(paymentId) {
     const res = await fetch(`${this.API_BASE}/api/approve-payment`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...this._envHeader() },
       body: JSON.stringify({ paymentId })
     });
 
@@ -112,14 +108,13 @@ class PiApp {
       const t = await res.text().catch(() => "");
       throw new Error(t || "Approve failed");
     }
-
     return true;
   }
 
   async completePayment(paymentId, txid) {
     const res = await fetch(`${this.API_BASE}/api/complete-payment`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...this._envHeader() },
       body: JSON.stringify({ paymentId, txid })
     });
 
