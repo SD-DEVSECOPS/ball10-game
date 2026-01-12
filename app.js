@@ -1,79 +1,53 @@
 class PiApp {
   constructor() {
     this.user = null;
-    this.authResult = null;
+    this.accessToken = null;
 
-    // Your Cloudflare Worker base URL
+    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
-    // paymentId -> metadata map
+    // paymentId -> metadata
     this.paymentMetaById = {};
 
-    this.setupAuthButton();
-    this.setupEventListeners();
-    this.refreshAuthUI();
+    this._authInFlight = null;
   }
 
-  setupAuthButton() {
-    const authButton = document.getElementById("pi-auth-button");
-    authButton.addEventListener("click", () => this.handleAuth());
+  // Called by game AuthGate scene
+  ensureAuthenticated() {
+    if (this.user && this.accessToken) return Promise.resolve({ user: this.user, accessToken: this.accessToken });
+    if (this._authInFlight) return this._authInFlight;
+
+    this._authInFlight = this.authenticate()
+      .finally(() => { this._authInFlight = null; });
+
+    return this._authInFlight;
   }
 
-  setupEventListeners() {
-    document.addEventListener("paymentInitiated", (e) => this.createPayment(e.detail));
-
-    document.addEventListener("sceneChanged", (e) => {
-      this.onSceneChanged(e.detail?.sceneKey);
-    });
-  }
-
-  onSceneChanged(sceneKey) {
-    const container = document.getElementById("pi-auth-container");
-    if (!container) return;
-
-    // Show Login only on MainMenu, only if not logged in
-    const shouldShow = sceneKey === "MainMenu" && !this.user;
-    container.style.display = shouldShow ? "block" : "none";
-
-    if (this.user) container.style.display = "none";
-  }
-
-  refreshAuthUI() {
-    const info = document.getElementById("pi-user-info");
-    if (!info) return;
-
-    info.innerHTML = this.user ? `Logged in as: <b>${this.user.username}</b>` : "";
-  }
-
-  async handleAuth() {
-    try {
-      if (typeof Pi === "undefined") {
-        this.showError("Pi SDK is not loaded. Please refresh the page.");
-        return;
-      }
-
-      const scopes = ["username", "payments"];
-      const authResult = await Pi.authenticate(scopes, this.handleIncompletePayment.bind(this));
-
-      this.authResult = authResult;
-      this.user = authResult?.user || null;
-
-      this.refreshAuthUI();
-      this.showMessage(this.user ? `Welcome ${this.user.username}!` : "Logged in successfully.");
-
-      this.onSceneChanged("MainMenu");
-    } catch (error) {
-      const msg = error?.message || String(error);
-      this.showError(`Authentication failed: ${msg}`);
+  async authenticate() {
+    if (typeof Pi === "undefined") {
+      throw new Error("Pi SDK is not loaded. Please refresh.");
     }
+
+    // Per the doc you pasted: empty scopes are fine and still returns accessToken + user
+    const scopes = [];
+
+    const auth = await Pi.authenticate(scopes, this.handleIncompletePaymentFound.bind(this));
+
+    this.user = auth?.user || null;
+    this.accessToken = auth?.accessToken || null;
+
+    if (!this.user || !this.accessToken) {
+      throw new Error("Authentication returned no user or access token.");
+    }
+    return auth;
+  }
+
+  handleIncompletePaymentFound(payment) {
+    // You can optionally try to complete it; for now just log.
+    console.log("Incomplete payment found:", payment);
   }
 
   createPayment(paymentData) {
-    if (typeof Pi === "undefined") {
-      this.showError("Pi SDK is not loaded.");
-      return;
-    }
-
     const callbacks = {
       onReadyForServerApproval: (paymentId) => {
         this.paymentMetaById[paymentId] = paymentData?.metadata || {};
@@ -91,54 +65,44 @@ class PiApp {
   }
 
   async handleApproval(paymentId) {
-    try {
-      const res = await fetch(`${this.API_BASE}/api/approve-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId })
-      });
+    const res = await fetch(`${this.API_BASE}/api/approve-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId })
+    });
 
-      if (!res.ok) throw new Error(await res.text());
-    } catch (e) {
-      this.showError(`Payment approval failed: ${e?.message || e}`);
-    }
+    if (!res.ok) throw new Error(await res.text());
   }
 
   async handleCompletion(paymentId, txid) {
-    try {
-      const res = await fetch(`${this.API_BASE}/api/complete-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId, txid })
-      });
+    const res = await fetch(`${this.API_BASE}/api/complete-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId, txid })
+    });
 
-      if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await res.text());
 
-      const meta = this.paymentMetaById[paymentId] || {};
-      const kind = meta?.kind || meta?.product || "unknown";
+    const meta = this.paymentMetaById[paymentId] || {};
+    const kind = meta?.kind || "unknown";
 
-      if (kind === "balloon_points") {
-        window.balance = (window.balance ?? 0) + 1000;
-        this.showMessage("1000 Balloon Points added!");
+    if (kind === "balloon_points") {
+      window.balance = (window.balance ?? 0) + 1000;
+      this.showMessage("1000 Balloon Points added!");
 
-        if (window.game?.scene?.isActive("Market")) {
-          window.game.scene.getScene("Market").scene.restart();
-        }
-      } else if (kind === "donation") {
-        const amt = meta?.amount ?? "";
-        this.showMessage(`Thanks for the donation ${amt ? `(${amt}π)` : ""} ❤️`);
-      } else {
-        this.showMessage("Payment completed ✅");
+      if (window.game?.scene?.isActive("Market")) {
+        window.game.scene.getScene("Market").scene.restart();
       }
-    } catch (e) {
-      this.showError(`Payment completion failed: ${e?.message || e}`);
+      return;
     }
-  }
 
-  handleIncompletePayment(payment) {
-    this.showError("Found an incomplete payment — attempting to complete...");
-    const txid = payment?.transaction?.txid || null;
-    this.handleCompletion(payment.identifier, txid);
+    if (kind === "donation") {
+      const amt = meta?.amount ?? "";
+      this.showMessage(`Thanks for your donation${amt ? ` (${amt}π)` : ""}! ❤️`);
+      return;
+    }
+
+    this.showMessage("Payment completed ✅");
   }
 
   showMessage(message) {
