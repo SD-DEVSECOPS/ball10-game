@@ -38,11 +38,14 @@ function saveProgress() {
 // ====== Helpers ======
 async function ensurePiLogin() {
   if (!window.piApp) throw new Error("piApp missing. app.js not loaded.");
-  // Authenticate if missing
+
+  // ✅ Login with username ONLY (no payments scope here)
   if (!window.piApp.user?.uid || !window.piApp.accessToken) {
-    await window.piApp.authenticate();
+    await window.piApp.authenticate(["username"]);
   }
+
   if (!window.piApp.user?.uid) throw new Error("Auth returned no uid.");
+  if (!window.piApp.accessToken) throw new Error("Auth returned no accessToken.");
   return true;
 }
 
@@ -67,7 +70,6 @@ async function claimTestnet1Pi() {
 
   const data = await res.json().catch(() => ({}));
 
-  // ✅ Surface full error details returned by Worker
   if (!res.ok) {
     const msg = data.error || "Claim failed";
     const det = stringifyDetails(data.details);
@@ -153,7 +155,6 @@ class MainMenu extends Phaser.Scene {
     const title = isGuest ? "Main Menu (Guest)" : "Main Menu";
     this.add.text(centerX, centerY - 140, title, { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
 
-    // ✅ Show username if logged in
     const uname = window.piApp?.user?.username || "(not logged in)";
     this.add.text(centerX, centerY - 110, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
@@ -267,8 +268,11 @@ class Market extends Phaser.Scene {
     try {
       this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
-      // Ensure login + payments permission before createPayment
+      // ✅ Make sure user is logged in
       await ensurePiLogin();
+
+      // ✅ Ask for payments permission only here
+      await window.piApp.ensurePaymentsPermission();
 
       window.piApp.createPayment(
         {
