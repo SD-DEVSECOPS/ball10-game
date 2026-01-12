@@ -36,7 +36,6 @@ class AuthGate extends Phaser.Scene {
     this.statusText.setText("Authenticating...");
 
     try {
-      // Must be triggered by user tap to avoid popup blocking
       await Promise.race([
         window.piApp.authenticate(),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
@@ -47,8 +46,6 @@ class AuthGate extends Phaser.Scene {
       const msg = e?.message || String(e);
       this.statusText.setText(`Login failed:\n${msg}`);
       this.retryBtn.setVisible(true);
-
-      // Also show top toast
       window.piApp?.showError?.(`Login failed: ${msg}`);
     }
   }
@@ -103,10 +100,8 @@ class Donate extends Phaser.Scene {
     const cy = this.cameras.main.height / 2;
 
     this.add.text(cx, cy - 160, "Donate ❤️", { fontSize: "34px", fill: "#fff" }).setOrigin(0.5);
-
     this.add.text(cx, cy - 120, "Choose an amount:", { fontSize: "18px", fill: "#ddd" }).setOrigin(0.5);
 
-    // quick buttons
     this.makeButton(cx - 120, cy - 70, "0.1π", () => this.startDonation(0.1));
     this.makeButton(cx,       cy - 70, "0.5π", () => this.startDonation(0.5));
     this.makeButton(cx + 120, cy - 70, "1π",   () => this.startDonation(1));
@@ -144,11 +139,7 @@ class Donate extends Phaser.Scene {
     this.setStatus(`Creating donation (${amount}π)...`);
 
     window.piApp.createPayment(
-      {
-        amount,
-        memo: "Ball10 Donation",
-        metadata: { kind: "donation", amount }
-      },
+      { amount, memo: "Ball10 Donation", metadata: { kind: "donation", amount } },
       {
         onStatus: (m) => this.setStatus(m),
         onError: (e) => this.setStatus(`Donation failed: ${e?.message || e}`)
@@ -166,10 +157,30 @@ class PlayGame extends Phaser.Scene {
   }
 
   create() {
+    window.gameOverFlag = false;
+
     this.balloons = this.physics.add.group();
     this.scoreText = this.add.text(10, 10, `Score: ${window.score}`, { fontSize: "20px", fill: "#fff" });
 
-    window.gameOverFlag = false;
+    // ✅ Make world bounds match screen
+    this.physics.world.setBounds(0, 0, this.cameras.main.width, this.cameras.main.height, true, true, true, true);
+
+    // ✅ Robust missed-balloon detection via worldbounds event
+    this.physics.world.on("worldbounds", (body) => {
+      if (window.gameOverFlag) return;
+      const obj = body?.gameObject;
+      if (!obj) return;
+
+      // Only trigger on bottom bound
+      if (body.blocked.down || body.touching.down) {
+        if (obj.texture?.key !== "redBalloon") {
+          this.gameOver();
+        } else {
+          // red balloon can fall; just remove it
+          obj.destroy();
+        }
+      }
+    });
 
     // ESC pause
     this.isPaused = false;
@@ -240,10 +251,15 @@ class PlayGame extends Phaser.Scene {
     const type = window.score >= 20 && Math.random() < 0.05 ? "redBalloon" : "balloon";
     const balloon = this.balloons.create(x, 0, type);
 
-    balloon.setVelocityY(window.balloonSpeed)
+    balloon
+      .setVelocityY(window.balloonSpeed)
       .setDisplaySize(80, 120)
       .setInteractive({ useHandCursor: true })
       .on("pointerdown", () => this.handleBalloonClick(balloon));
+
+    // ✅ Enable worldbounds event per body
+    balloon.body.setCollideWorldBounds(true);
+    balloon.body.onWorldBounds = true;
   }
 
   handleBalloonClick(balloon) {
@@ -262,12 +278,15 @@ class PlayGame extends Phaser.Scene {
     if (window.score % 100 === 0) window.balloonSpeed += 10;
   }
 
+  // Backup safety: if a body somehow goes off-screen without worldbounds firing
   update() {
     if (window.gameOverFlag || this.isPaused) return;
 
-    this.balloons.children.iterate(b => {
-      if (b?.y > this.cameras.main.height && b.texture.key !== "redBalloon") {
-        this.gameOver();
+    this.balloons.children.iterate((b) => {
+      if (!b || !b.active) return;
+      if (b.y - (b.displayHeight / 2) > this.cameras.main.height) {
+        if (b.texture?.key !== "redBalloon") this.gameOver();
+        else b.destroy();
       }
     });
   }
@@ -318,7 +337,10 @@ const config = {
   height: window.innerHeight,
   backgroundColor: "#222",
   scene: [AuthGate, MainMenu, Donate, PlayGame],
-  physics: { default: "arcade", arcade: { debug: false } }
+  physics: {
+    default: "arcade",
+    arcade: { debug: false }
+  }
 };
 
 window.game = new Phaser.Game(config);
