@@ -7,25 +7,10 @@
   <style>
     body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background:#222; }
     canvas { display:block; margin:0 auto; }
-    .pi-alert{
-      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-      padding: 12px 18px; border-radius: 6px; font-weight: bold; z-index: 10001;
-    }
-    .pi-success{ background:#14C993; color:#fff; }
-    .pi-error{ background:#FF4757; color:#fff; }
   </style>
 </head>
 <body>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-  <script src="https://sdk.minepi.com/pi-sdk.js"></script>
-
-  <script>
-    // MAINNET / production
-    Pi.init({ version: "2.0", sandbox: false });
-  </script>
-
-  <script src="app.js"></script>
-  <script src="pi-payments.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
