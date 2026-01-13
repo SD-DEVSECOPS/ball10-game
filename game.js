@@ -281,24 +281,35 @@ class PlayGame extends Phaser.Scene {
     this.scene.start("MainMenu");
   }
 
-  attachWordTextToBalloon(balloon) {
-    const pair = pickRandomWordPair();
-    if (!pair) return;
+attachWordTextToBalloon(balloon) {
+  const pair = pickRandomWordPair();
+  if (!pair) return;
 
-    // Blue text
-    const styleTop = { fontSize: "14px", fill: "#2aa8ff", fontStyle: "bold" };
-    const styleBot = { fontSize: "13px", fill: "#2aa8ff" };
+  // ✅ White text (high contrast on blue balloon)
+  const styleTop = {
+    fontSize: "14px",
+    fill: "#ffffff",
+    fontStyle: "bold",
+    stroke: "#000000",
+    strokeThickness: 2
+  };
 
-    const t1 = this.add.text(balloon.x, balloon.y - 18, pair.de, styleTop).setOrigin(0.5);
-    const t2 = this.add.text(balloon.x, balloon.y + 2, pair.en, styleBot).setOrigin(0.5);
+  const styleBot = {
+    fontSize: "13px",
+    fill: "#ffffff",
+    stroke: "#000000",
+    strokeThickness: 2
+  };
 
-    // Keep on top of sprite
-    t1.setDepth(50);
-    t2.setDepth(50);
+  const t1 = this.add.text(balloon.x, balloon.y - 18, pair.de, styleTop).setOrigin(0.5);
+  const t2 = this.add.text(balloon.x, balloon.y + 2, pair.en, styleBot).setOrigin(0.5);
 
-    balloon.wordTextTop = t1;
-    balloon.wordTextBottom = t2;
-  }
+  t1.setDepth(50);
+  t2.setDepth(50);
+
+  balloon.wordTextTop = t1;
+  balloon.wordTextBottom = t2;
+}
 
   destroyBalloonTexts(balloon) {
     if (balloon?.wordTextTop) {
