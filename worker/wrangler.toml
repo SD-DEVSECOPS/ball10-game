@@ -2,7 +2,6 @@ name = "pi-payment-backend"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# If you use KV for claims later, bind it here (optional)
-# [[kv_namespaces]]
-# binding = "CLAIMS"
-# id = "YOUR_KV_ID"
+kv_namespaces = [
+  { binding = "CLAIMS", id = "73b069b368e441409cde7fb3bb64171f" }
+]
