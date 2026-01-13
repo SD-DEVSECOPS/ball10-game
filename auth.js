@@ -31,6 +31,18 @@
     showAlert("Logged out.");
   }
 
+  async function restoreFromDb() {
+    const token = getToken();
+    if (!token) return null;
+
+    const data = await window.Ball10API.me(token);
+    if (data?.user) {
+      setSession(token, data.user);
+      return data.user;
+    }
+    return null;
+  }
+
   async function promptLoginOrRegister() {
     const mode = prompt("Type: login OR register", "login");
     if (!mode) return null;
@@ -50,7 +62,7 @@
     const data = await window.Ball10API.login(username, password);
     setSession(data.token, data.user);
     showAlert(`Welcome ${data.user.username} ✅`);
-    return data;
+    return data.user;
   }
 
   window.Ball10Auth = {
@@ -59,6 +71,7 @@
     getUser,
     setSession,
     logout,
+    restoreFromDb,
     promptLoginOrRegister,
   };
 })();
