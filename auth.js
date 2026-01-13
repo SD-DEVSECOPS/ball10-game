@@ -43,26 +43,29 @@
     return null;
   }
 
-  async function promptLoginOrRegister() {
-    const mode = prompt("Type: login OR register", "login");
-    if (!mode) return null;
-
+  async function promptLogin() {
     const username = prompt("Username:", "");
     if (!username) return null;
 
     const password = prompt("Password:", "");
     if (!password) return null;
 
-    if (mode.toLowerCase().startsWith("r")) {
-      await window.Ball10API.register(username, password);
-      showAlert("Registered ✅ Now login.");
-      return null;
-    }
-
     const data = await window.Ball10API.login(username, password);
     setSession(data.token, data.user);
     showAlert(`Welcome ${data.user.username} ✅`);
     return data.user;
+  }
+
+  async function promptRegister() {
+    const username = prompt("Choose a username:", "");
+    if (!username) return null;
+
+    const password = prompt("Choose a password:", "");
+    if (!password) return null;
+
+    await window.Ball10API.register(username, password);
+    showAlert("Registered ✅ Now login.");
+    return null;
   }
 
   window.Ball10Auth = {
@@ -72,6 +75,7 @@
     setSession,
     logout,
     restoreFromDb,
-    promptLoginOrRegister,
+    promptLogin,
+    promptRegister,
   };
 })();
