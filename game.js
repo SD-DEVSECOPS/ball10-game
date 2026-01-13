@@ -1,4 +1,3 @@
-// ====== ORIGINAL GLOBALS (kept) ======
 let score = 0;
 let highScore = 0;
 let balance = 100;
@@ -6,7 +5,6 @@ let poppedBalloons = 0;
 let gameOverFlag = false;
 let balloonSpeed = 150;
 
-// ====== MODE + STORAGE (minimal) ======
 let isGuest = false;
 
 function storageKey(name) {
@@ -32,7 +30,6 @@ function saveProgress() {
   } catch (_) {}
 }
 
-// ====== AUTH SCENE (Pi login or Guest) ======
 class Auth extends Phaser.Scene {
   constructor() {
     super({ key: "Auth" });
@@ -50,7 +47,6 @@ class Auth extends Phaser.Scene {
       align: "center"
     }).setOrigin(0.5);
 
-    // Login with Pi (must be user tap)
     this.add.text(centerX, centerY, "Login with Pi", { fontSize: "26px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -59,21 +55,10 @@ class Auth extends Phaser.Scene {
         try {
           isGuest = false;
 
-          // Use Ball10Payments wrapper if available (preferred)
-          if (window.Ball10Payments?.ensurePiLogin) {
-            await Promise.race([
-              window.Ball10Payments.ensurePiLogin(),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 20000))
-            ]);
-          } else if (window.piApp?.authenticate) {
-            // fallback
-            await Promise.race([
-              window.piApp.authenticate(["username"]),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 20000))
-            ]);
-          } else {
-            throw new Error("Pi auth helper missing (pi-payments.js / app.js not loaded)");
-          }
+          await Promise.race([
+            window.piApp.authenticate(["username"]),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 20000))
+          ]);
 
           loadProgress();
           this.scene.start("MainMenu");
@@ -84,7 +69,6 @@ class Auth extends Phaser.Scene {
         }
       });
 
-    // Guest mode
     this.add.text(centerX, centerY + 60, "Continue as Guest", { fontSize: "20px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -101,7 +85,6 @@ class Auth extends Phaser.Scene {
   }
 }
 
-// ====== MAIN MENU ======
 class MainMenu extends Phaser.Scene {
   constructor() {
     super({ key: "MainMenu" });
@@ -119,6 +102,7 @@ class MainMenu extends Phaser.Scene {
     const title = isGuest ? "Main Menu (Guest)" : "Main Menu";
     this.add.text(centerX, centerY - 140, title, { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
 
+    // ✅ show username (this is what you’re missing)
     const uname = window.piApp?.user?.username || "(not logged in)";
     this.add.text(centerX, centerY - 110, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
@@ -145,7 +129,8 @@ class MainMenu extends Phaser.Scene {
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
-    // Show saved stats
+    this.add.text(centerX, centerY + 120, "Market Coming soon!", { fontSize: "16px", fill: "#bbb" }).setOrigin(0.5);
+
     this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
   }
@@ -158,7 +143,6 @@ class MainMenu extends Phaser.Scene {
   }
 }
 
-// ====== MARKET (donation only) ======
 class Market extends Phaser.Scene {
   constructor() {
     super({ key: "Market" });
@@ -215,21 +199,25 @@ class Market extends Phaser.Scene {
     try {
       this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
-      if (!window.Ball10Payments?.donatePi) {
-        throw new Error("Ball10Payments missing. Make sure pi-payments.js is loaded in index.html.");
-      }
+      await window.piApp.ensurePaymentsPermission();
 
-      await window.Ball10Payments.donatePi(amount, {
-        onStatus: (m) => this.paymentStatus.setText(m),
-        onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
-      });
+      await window.piApp.createPayment(
+        {
+          amount,
+          memo: "Ball10 Donation",
+          metadata: { kind: "donation", amount }
+        },
+        {
+          onStatus: (m) => this.paymentStatus.setText(m),
+          onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
+        }
+      );
     } catch (e) {
       this.paymentStatus.setText(`Donation failed: ${e?.message || e}`);
     }
   }
 }
 
-// ====== PLAY GAME (YOUR ORIGINAL LOGIC, kept) ======
 class PlayGame extends Phaser.Scene {
   constructor() {
     super({ key: "PlayGame" });
@@ -254,7 +242,6 @@ class PlayGame extends Phaser.Scene {
       loop: true
     });
 
-    // ESC pause
     this.isPaused = false;
     this.pauseOverlay = null;
     this.input.keyboard.on("keydown-ESC", () => this.togglePause());
