@@ -1,24 +1,10 @@
-// worker/worker.js
-// Cloudflare Worker backend for Pi auth/payment flows.
-//
-// REQUIRED Cloudflare Secrets:
-// - PI_SERVER_KEY               (mainnet Pi API key) [optional if you only use testnet]
-// - PI_SERVER_KEY_TESTNET       (testnet Pi API key) [required for testnet]
-// - APP_WALLET_PUBLIC_TESTNET   (G... address)       [required for /api/claim]
-// - APP_WALLET_SEED_TESTNET     (S... secret seed)   [required for /api/claim]
-//
-// REQUIRED KV Binding:
-// - CLAIMS
-
 import * as StellarSdk from "stellar-sdk";
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // -------------------------
     // CORS
-    // -------------------------
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -41,9 +27,7 @@ export default {
         headers: { ...corsHeaders, "Content-Type": "text/plain" },
       });
 
-    // -------------------------
-    // Basic routes
-    // -------------------------
+    // Root
     if (url.pathname === "/") {
       return text(
         "pi-payment-backend is running. Try /health, /api/approve-payment, /api/complete-payment, /api/claim",
@@ -51,13 +35,12 @@ export default {
       );
     }
 
+    // Health
     if (url.pathname === "/health") {
       return json({ ok: true, service: "pi-payment-backend" }, 200);
     }
 
-    // -------------------------
-    // Choose environment (testnet/mainnet)
-    // -------------------------
+    // Pick correct key per caller (testnet vs mainnet)
     const piEnv = (request.headers.get("X-PI-ENV") || "").toLowerCase();
     const isTestnet = piEnv === "testnet";
 
@@ -75,7 +58,7 @@ export default {
     const PI_API_URL = "https://api.minepi.com/v2";
 
     // =========================
-    // U2A: approve payment
+    // U2A donation: approve
     // =========================
     if (url.pathname === "/api/approve-payment" && request.method === "POST") {
       try {
@@ -104,7 +87,7 @@ export default {
     }
 
     // =========================
-    // U2A: complete payment
+    // U2A donation: complete
     // =========================
     if (url.pathname === "/api/complete-payment" && request.method === "POST") {
       try {
@@ -133,15 +116,8 @@ export default {
     }
 
     // =========================
-    // A2U TESTNET CLAIM: 1π
-    //
-    // Correct flow:
-    //  1) /me (Bearer accessToken) => uid
-    //  2) POST /payments (Key serverKey) => payment identifier + recipient address
-    //  3) Send on-chain payment from APP wallet to recipient address on Pi Testnet
-    //     Memo MUST be payment identifier
-    //  4) POST /payments/:id/complete with txid
-    //  5) Save in KV so user can’t claim twice
+    // A2U testnet claim: 1π
+    // Flow: /me -> create payment -> send tx -> complete -> KV lock
     // =========================
     if (url.pathname === "/api/claim" && request.method === "POST") {
       try {
@@ -194,15 +170,15 @@ export default {
           return json({ error: "Missing uid from /me response", details: me }, 400);
         }
 
-        // 2) Prevent double claim
+        // 2) Prevent double-claim
         const already = await env.CLAIMS.get(uid);
         if (already) return json({ error: "Already claimed" }, 409);
 
-        // 3) Create payment (A2U)
+        // 3) Create A2U payment
         const createRes = await fetch(`${PI_API_URL}/payments`, {
           method: "POST",
           headers: {
-            Authorization: `Key ${PI_SERVER_KEY}`, // testnet key because X-PI-ENV=testnet
+            Authorization: `Key ${PI_SERVER_KEY}`, // testnet key here
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -222,7 +198,7 @@ export default {
         }
 
         if (!createRes.ok) {
-          // If this says "user not found", your PI_SERVER_KEY_TESTNET is for the wrong Pi App.
+          // If "user not found" here => PI_SERVER_KEY_TESTNET belongs to a different Pi App.
           return json({ error: "Create payment failed", details: payment, uid }, 500);
         }
 
@@ -240,7 +216,7 @@ export default {
           );
         }
 
-        // 4) Send on-chain transaction on Pi Testnet
+        // 4) Send testnet chain tx
         const horizon = new StellarSdk.Horizon.Server("https://api.testnet.minepi.com");
 
         const sourceAccount = await horizon.loadAccount(APP_WALLET_PUBLIC);
@@ -259,7 +235,7 @@ export default {
               amount: "1",
             })
           )
-          // IMPORTANT: memo must include the Pi payment identifier
+          // MUST include payment identifier
           .addMemo(StellarSdk.Memo.text(paymentId))
           .build();
 
@@ -272,7 +248,7 @@ export default {
           return json({ error: "Transaction submitted but txid missing", details: submitRes }, 500);
         }
 
-        // 5) Complete payment with txid
+        // 5) Complete with txid
         const completeRes = await fetch(`${PI_API_URL}/payments/${paymentId}/complete`, {
           method: "POST",
           headers: {
@@ -290,7 +266,7 @@ export default {
           );
         }
 
-        // 6) Save claim in KV
+        // 6) KV lock
         await env.CLAIMS.put(
           uid,
           JSON.stringify({ claimedAt: Date.now(), username: username || "" })
