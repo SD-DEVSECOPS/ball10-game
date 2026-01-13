@@ -1,101 +1,89 @@
+// ====== ORIGINAL GLOBALS (kept) ======
 let score = 0;
 let highScore = 0;
-let balance = 0;
+let balance = 100;
 let poppedBalloons = 0;
 let gameOverFlag = false;
-let balloonSpeed = 150;
 
-// Track guest mode (DB only if logged in)
-let isGuest = true;
+// ✅ Difficulty settings
+let balloonSpeed = 150;         // start speed (same)
+const BASE_BALLOON_SPEED = 150; // keep base
+const SPEED_STEP_SCORE = 10;    // every 10 points
+const SPEED_STEP_AMOUNT = 35;   // visible increase
+const MAX_BALLOON_SPEED = 900;  // cap so it doesn't break
 
-async function initUserStateFromDbIfLoggedIn() {
+// ====== MODE + STORAGE (minimal) ======
+let isGuest = false;
+
+function storageKey(name) {
+  const uid = window.piApp?.user?.uid;
+  const prefix = uid ? `ball10_${uid}` : "ball10_guest";
+  return `${prefix}_${name}`;
+}
+
+function loadProgress() {
   try {
-    const user = await window.Ball10Auth.restoreFromDb();
-    if (user) {
-      isGuest = false;
-      highScore = Number(user.highscore || 0);
-      balance = Number(user.balance || 0);
-      return;
-    }
+    const hs = Number(localStorage.getItem(storageKey("highScore")));
+    if (Number.isFinite(hs) && hs >= 0) highScore = hs;
+
+    const bal = Number(localStorage.getItem(storageKey("balance")));
+    if (Number.isFinite(bal) && bal >= 0) balance = bal;
   } catch (_) {}
-
-  // Guest fallback
-  isGuest = true;
-  highScore = 0;
-  balance = 100;
 }
 
-async function saveToDb() {
-  const token = window.Ball10Auth.getToken();
-  if (!token) return; // guest => no DB save
+function saveProgress() {
   try {
-    await window.Ball10API.save(token, highScore, balance);
-  } catch (e) {
-    console.warn("Save failed:", e?.message || e);
-  }
+    localStorage.setItem(storageKey("highScore"), String(highScore));
+    localStorage.setItem(storageKey("balance"), String(balance));
+  } catch (_) {}
 }
 
-// ====== AUTH SCENE ======
+// ====== AUTH SCENE (Pi login or Guest) ======
 class Auth extends Phaser.Scene {
-  constructor() { super({ key: "Auth" }); }
+  constructor() {
+    super({ key: "Auth" });
+  }
 
   create() {
-    const cx = this.cameras.main.width / 2;
-    const cy = this.cameras.main.height / 2;
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
 
-    this.add.text(cx, cy - 160, "Ball-10", { fontSize: "44px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(centerX, centerY - 140, "Ball-10", { fontSize: "44px", fill: "#fff" }).setOrigin(0.5);
 
-    this.status = this.add.text(cx, cy - 100, "Choose an option:", {
-      fontSize: "16px", fill: "#ddd", align: "center"
+    this.status = this.add.text(centerX, centerY - 70, "Choose a mode:", {
+      fontSize: "16px",
+      fill: "#ddd",
+      align: "center"
     }).setOrigin(0.5);
 
-    // LOGIN button
-    this.add.text(cx, cy - 40, "Login", { fontSize: "26px", fill: "#0f0" })
+    this.add.text(centerX, centerY, "Login", { fontSize: "26px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", async () => {
         this.status.setText("Logging in...");
         try {
-          await window.Ball10Auth.promptLogin();
-          await initUserStateFromDbIfLoggedIn();
+          isGuest = false;
+          await window.Ball10Auth.ensureLogin();
+          await window.Ball10Auth.loadMe(); // pulls balance/highScore
+          loadProgress(); // optional local cache if you still use it
           this.scene.start("MainMenu");
         } catch (e) {
           const msg = e?.message || String(e);
           this.status.setText(`Login failed: ${msg}`);
-          window.Ball10Auth.showAlert(`Login failed: ${msg}`, true);
         }
       });
 
-    // REGISTER button
-    this.add.text(cx, cy + 25, "Register", { fontSize: "22px", fill: "#0ff" })
+    this.add.text(centerX, centerY + 60, "Continue as Guest", { fontSize: "20px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
-      .on("pointerdown", async () => {
-        this.status.setText("Creating account...");
-        try {
-          await window.Ball10Auth.promptRegister();
-          this.status.setText("Account created. Now login.");
-        } catch (e) {
-          const msg = e?.message || String(e);
-          this.status.setText(`Register failed: ${msg}`);
-          window.Ball10Auth.showAlert(`Register failed: ${msg}`, true);
-        }
-      });
-
-    // GUEST PLAY button
-    this.add.text(cx, cy + 90, "Play as Guest", { fontSize: "20px", fill: "#ff0" })
-      .setOrigin(0.5)
-      .setInteractive()
-      .on("pointerdown", async () => {
-        await initUserStateFromDbIfLoggedIn(); // will set guest if no session
+      .on("pointerdown", () => {
         isGuest = true;
-        highScore = 0;
-        balance = 100;
+        loadProgress();
         this.scene.start("MainMenu");
       });
 
-    this.add.text(cx, cy + 140,
-      "Guest: no cloud save / no leaderboard entry.\nLogin: saves to database + leaderboard.",
+    this.add.text(centerX, centerY + 120,
+      "Guest mode: Play only.",
       { fontSize: "13px", fill: "#bbb", align: "center" }
     ).setOrigin(0.5);
   }
@@ -103,79 +91,47 @@ class Auth extends Phaser.Scene {
 
 // ====== MAIN MENU ======
 class MainMenu extends Phaser.Scene {
-  constructor() { super({ key: "MainMenu" }); }
+  constructor() {
+    super({ key: "MainMenu" });
+  }
 
   preload() {
     this.load.image("balloon", "balloon.png");
     this.load.image("redBalloon", "red_balloon.png");
   }
 
-  async create() {
-    const cx = this.cameras.main.width / 2;
-    const cy = this.cameras.main.height / 2;
+  create() {
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
 
-    const user = window.Ball10Auth.getUser();
-    const uname = user?.username || "Guest";
+    const title = isGuest ? "Main Menu (Guest)" : "Main Menu";
+    this.add.text(centerX, centerY - 140, title, { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(cx, cy - 160, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
-    this.add.text(cx, cy - 130, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
+    const uname = window.Ball10Auth?.getUsername?.() || (isGuest ? "Guest" : "(not logged in)");
+    this.add.text(centerX, centerY - 110, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
-    // Start button always
-    this.add.text(cx, cy - 95, "Start", { fontSize: "22px", fill: "#0f0" })
+    this.add.text(centerX, centerY - 80, "Start", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", () => this.startGame());
 
-    this.add.text(cx, cy - 40, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
-    this.add.text(cx, cy - 15, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
-
-    // ✅ If logged in: show ONLY logout (no login/register button)
-    if (user) {
-      this.add.text(cx, cy + 25, "Logout", { fontSize: "18px", fill: "#ff0" })
-        .setOrigin(0.5)
-        .setInteractive()
-        .on("pointerdown", () => {
-          window.Ball10Auth.logout();
-          this.scene.start("Auth");
-        });
-    } else {
-      // ✅ If guest: show login/register entry
-      this.add.text(cx, cy + 25, "Login / Register", { fontSize: "18px", fill: "#0ff" })
-        .setOrigin(0.5)
-        .setInteractive()
-        .on("pointerdown", () => this.scene.start("Auth"));
-    }
-
-    // Leaderboard (show always, but guest doesn't submit)
-    this.lbText = this.add.text(cx, cy + 120, "Leaderboard: loading...", {
-      fontSize: "14px", fill: "#ddd", align: "center"
-    }).setOrigin(0.5);
-
-    try {
-      const data = await window.Ball10API.leaderboard();
-      const list = data.leaderboard || [];
-      if (!list.length) {
-        this.lbText.setText("Leaderboard:\n(no scores yet)");
-      } else {
-        const lines = list.map((r, i) => `${i + 1}. ${r.username} — ${r.highscore}`);
-        this.lbText.setText("Leaderboard:\n" + lines.join("\n"));
-      }
-    } catch {
-      this.lbText.setText("Leaderboard:\n(unavailable)");
-    }
+    this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
   }
 
   startGame() {
     score = 0;
     poppedBalloons = 0;
-    balloonSpeed = 150;
+    balloonSpeed = BASE_BALLOON_SPEED; // ✅ reset speed correctly
     this.scene.start("PlayGame");
   }
 }
 
-// ====== PLAY GAME (LOGIC KEPT SAME) ======
+// ====== PLAY GAME (game logic kept, only speed ramp adjusted) ======
 class PlayGame extends Phaser.Scene {
-  constructor() { super({ key: "PlayGame" }); }
+  constructor() {
+    super({ key: "PlayGame" });
+  }
 
   preload() {
     this.load.image("balloon", "balloon.png");
@@ -242,8 +198,19 @@ class PlayGame extends Phaser.Scene {
     this.hidePauseMenu();
     score = 0;
     poppedBalloons = 0;
-    balloonSpeed = 150;
+    balloonSpeed = BASE_BALLOON_SPEED;
     this.scene.start("MainMenu");
+  }
+
+  // ✅ helper: update speed every 10 points (visible)
+  recalcSpeedAndApply() {
+    const steps = Math.floor(score / SPEED_STEP_SCORE);
+    balloonSpeed = Math.min(MAX_BALLOON_SPEED, BASE_BALLOON_SPEED + steps * SPEED_STEP_AMOUNT);
+
+    // apply to current balloons so the change is felt instantly
+    this.balloons.children.iterate(b => {
+      if (b?.body && b.active) b.setVelocityY(balloonSpeed);
+    });
   }
 
   dropBalloon() {
@@ -269,11 +236,17 @@ class PlayGame extends Phaser.Scene {
       this.scoreText.setText(`Score: ${score}`);
       balloon.destroy();
 
+      // ✅ update speed every 10 points
+      if (score % SPEED_STEP_SCORE === 0) {
+        this.recalcSpeedAndApply();
+      }
+
+      // keep your reward logic same
       if (++poppedBalloons % 5000 === 0) {
         balance += 10;
         this.balanceText.setText(`Balance: ${balance}`);
+        saveProgress();
       }
-      if (score % 100 === 0) balloonSpeed += 10;
     }
   }
 
@@ -287,27 +260,27 @@ class PlayGame extends Phaser.Scene {
     });
   }
 
-  async gameOver() {
+  gameOver() {
     gameOverFlag = true;
     this.physics.pause();
     this.balloons.clear(true, true);
 
     highScore = Math.max(highScore, score);
+    saveProgress();
 
-    await saveToDb();
-
-    const cx = this.cameras.main.width / 2;
-    const cy = this.cameras.main.height / 2;
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
 
     this.add.text(
-      cx, cy - 50,
+      centerX,
+      centerY - 50,
       `Game Over\nScore: ${score}\nHigh Score: ${highScore}\nBalance: ${balance}`,
       { fontSize: "20px", fill: "#fff", align: "center" }
     ).setOrigin(0.5);
 
-    this.createButton("Retry", cy, () => this.restartGame());
-    this.createButton("Continue (10 points)", cy + 50, () => this.continueGame());
-    this.createButton("Main Menu", cy + 100, () => this.returnToMenu());
+    this.createButton("Retry", centerY, () => this.restartGame());
+    this.createButton("Continue (10 points)", centerY + 50, () => this.continueGame());
+    this.createButton("Main Menu", centerY + 100, () => this.returnToMenu());
   }
 
   createButton(text, y, callback) {
@@ -320,14 +293,15 @@ class PlayGame extends Phaser.Scene {
   restartGame() {
     score = 0;
     poppedBalloons = 0;
-    balloonSpeed = 150;
+    balloonSpeed = BASE_BALLOON_SPEED;
     this.scene.restart();
   }
 
-  async continueGame() {
+  continueGame() {
     if (balance >= 10) {
       balance -= 10;
-      await saveToDb();
+      saveProgress();
+      balloonSpeed = BASE_BALLOON_SPEED;
       this.scene.restart();
     } else {
       alert("Not enough points!");
@@ -337,6 +311,7 @@ class PlayGame extends Phaser.Scene {
 
   returnToMenu() {
     score = 0;
+    balloonSpeed = BASE_BALLOON_SPEED;
     this.scene.start("MainMenu");
   }
 }
@@ -347,11 +322,14 @@ const config = {
   height: window.innerHeight,
   backgroundColor: "#222",
   scene: [Auth, MainMenu, PlayGame],
-  physics: { default: "arcade", arcade: { debug: false } }
+  physics: {
+    default: "arcade",
+    arcade: { debug: false }
+  }
 };
 
-(async () => {
-  await initUserStateFromDbIfLoggedIn();
-  const game = new Phaser.Game(config);
-  window.addEventListener("resize", () => game.scale.resize(window.innerWidth, window.innerHeight));
-})();
+const game = new Phaser.Game(config);
+
+window.addEventListener("resize", () => {
+  game.scale.resize(window.innerWidth, window.innerHeight);
+});
