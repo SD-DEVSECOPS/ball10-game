@@ -25,18 +25,16 @@ async function loadWordsOnce() {
   try {
     const data = await window.Ball10API.words();
     const list = data?.words || [];
-    // normalize: [{de,en}]
     wordPairs = list
       .map(w => ({
         de: String(w.de || "").trim(),
         en: String(w.en || "").trim()
       }))
       .filter(w => w.de && w.en);
-
     console.log("Words loaded:", wordPairs.length);
   } catch (e) {
     console.warn("Words load failed:", e?.message || e);
-    wordPairs = []; // fallback: no words shown
+    wordPairs = [];
   }
 }
 
@@ -119,7 +117,7 @@ class Auth extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", async () => {
-        await initUserStateFromDbIfLoggedIn(); // will set guest if no session
+        await initUserStateFromDbIfLoggedIn();
         isGuest = true;
         highScore = 0;
         balance = 100;
@@ -149,7 +147,6 @@ class MainMenu extends Phaser.Scene {
     const user = window.Ball10Auth.getUser();
     const uname = user?.username || "Guest";
 
-    // ✅ Load words once (cache)
     await loadWordsOnce();
 
     this.add.text(cx, cy - 160, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
@@ -174,14 +171,12 @@ class MainMenu extends Phaser.Scene {
           this.scene.start("Auth");
         });
     } else {
-      // If guest: show login/register entry
       this.add.text(cx, cy + 25, "Login / Register", { fontSize: "18px", fill: "#0ff" })
         .setOrigin(0.5)
         .setInteractive()
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
-    // Leaderboard (show always, but guest doesn't submit)
     this.lbText = this.add.text(cx, cy + 120, "Leaderboard: loading...", {
       fontSize: "14px", fill: "#ddd", align: "center"
     }).setOrigin(0.5);
@@ -281,35 +276,34 @@ class PlayGame extends Phaser.Scene {
     this.scene.start("MainMenu");
   }
 
-attachWordTextToBalloon(balloon) {
-  const pair = pickRandomWordPair();
-  if (!pair) return;
+  attachWordTextToBalloon(balloon) {
+    const pair = pickRandomWordPair();
+    if (!pair) return;
 
-  // ✅ White text (high contrast on blue balloon)
-  const styleTop = {
-    fontSize: "16px",
-    fill: "#ffffff",
-    fontStyle: "bold",
-    stroke: "#000000",
-    strokeThickness: 2
-  };
+    // ✅ White text + black outline
+    const styleTop = {
+      fontSize: "16px",
+      fill: "#ffffff",
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 2
+    };
+    const styleBot = {
+      fontSize: "16px",
+      fill: "#ffffff",
+      stroke: "#000000",
+      strokeThickness: 2
+    };
 
-  const styleBot = {
-    fontSize: "16px",
-    fill: "#ffffff",
-    stroke: "#000000",
-    strokeThickness: 2
-  };
+    const t1 = this.add.text(balloon.x, balloon.y - 18, pair.de, styleTop).setOrigin(0.5);
+    const t2 = this.add.text(balloon.x, balloon.y + 2, pair.en, styleBot).setOrigin(0.5);
 
-  const t1 = this.add.text(balloon.x, balloon.y - 18, pair.de, styleTop).setOrigin(0.5);
-  const t2 = this.add.text(balloon.x, balloon.y + 2, pair.en, styleBot).setOrigin(0.5);
+    t1.setDepth(50);
+    t2.setDepth(50);
 
-  t1.setDepth(50);
-  t2.setDepth(50);
-
-  balloon.wordTextTop = t1;
-  balloon.wordTextBottom = t2;
-}
+    balloon.wordTextTop = t1;
+    balloon.wordTextBottom = t2;
+  }
 
   destroyBalloonTexts(balloon) {
     if (balloon?.wordTextTop) {
@@ -334,7 +328,6 @@ attachWordTextToBalloon(balloon) {
       .setInteractive({ useHandCursor: true })
       .on("pointerdown", () => this.handleBalloonClick(balloon));
 
-    // ✅ Only normal (blue) balloon shows words
     if (balloonType === "balloon") {
       this.attachWordTextToBalloon(balloon);
     }
@@ -349,7 +342,6 @@ attachWordTextToBalloon(balloon) {
       score++;
       this.scoreText.setText(`Score: ${score}`);
 
-      // ✅ Cleanup texts
       this.destroyBalloonTexts(balloon);
       balloon.destroy();
 
@@ -358,7 +350,7 @@ attachWordTextToBalloon(balloon) {
         this.balanceText.setText(`Balance: ${balance}`);
       }
 
-      // ✅ NEW SPEED RULE: +35 every 10 points
+      // ✅ +35 every 10 points
       if (score % 10 === 0) {
         balloonSpeed += 35;
       }
@@ -371,7 +363,6 @@ attachWordTextToBalloon(balloon) {
     this.balloons.children.iterate(balloon => {
       if (!balloon) return;
 
-      // ✅ Follow balloon position
       if (balloon.wordTextTop) {
         balloon.wordTextTop.x = balloon.x;
         balloon.wordTextTop.y = balloon.y - 18;
@@ -391,7 +382,6 @@ attachWordTextToBalloon(balloon) {
     gameOverFlag = true;
     this.physics.pause();
 
-    // ✅ Destroy attached texts before clearing sprites
     this.balloons.children.iterate(balloon => {
       if (balloon) this.destroyBalloonTexts(balloon);
     });
@@ -457,7 +447,7 @@ const config = {
 
 (async () => {
   await initUserStateFromDbIfLoggedIn();
-  await loadWordsOnce(); // ✅ preload word list once
+  await loadWordsOnce();
   const game = new Phaser.Game(config);
   window.addEventListener("resize", () => game.scale.resize(window.innerWidth, window.innerHeight));
 })();
