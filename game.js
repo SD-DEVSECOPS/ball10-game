@@ -1,7 +1,7 @@
 // ====== ORIGINAL GLOBALS (kept) ======
 let score = 0;
 let highScore = 0;
-let balance = 100;
+let balance = 0;
 let poppedBalloons = 0;
 let gameOverFlag = false;
 
