@@ -6,7 +6,7 @@ let poppedBalloons = 0;
 let gameOverFlag = false;
 let balloonSpeed = 150;
 
-// ====== NEW: MODE + STORAGE (minimal) ======
+// ====== MODE + STORAGE (minimal) ======
 let isGuest = false;
 
 function storageKey(name) {
@@ -32,7 +32,7 @@ function saveProgress() {
   } catch (_) {}
 }
 
-// ====== NEW SCENE: AUTH (Pi login or Guest) ======
+// ====== AUTH SCENE (Pi login or Guest) ======
 class Auth extends Phaser.Scene {
   constructor() {
     super({ key: "Auth" });
@@ -58,10 +58,23 @@ class Auth extends Phaser.Scene {
         this.status.setText("Authenticating with Pi...");
         try {
           isGuest = false;
-          await Promise.race([
-            window.piApp.authenticate(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 12000))
-          ]);
+
+          // Use Ball10Payments wrapper if available (preferred)
+          if (window.Ball10Payments?.ensurePiLogin) {
+            await Promise.race([
+              window.Ball10Payments.ensurePiLogin(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 20000))
+            ]);
+          } else if (window.piApp?.authenticate) {
+            // fallback
+            await Promise.race([
+              window.piApp.authenticate(["username"]),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timed out.")), 20000))
+            ]);
+          } else {
+            throw new Error("Pi auth helper missing (pi-payments.js / app.js not loaded)");
+          }
+
           loadProgress();
           this.scene.start("MainMenu");
         } catch (e) {
@@ -77,7 +90,7 @@ class Auth extends Phaser.Scene {
       .setInteractive()
       .on("pointerdown", () => {
         isGuest = true;
-        loadProgress(); // guest progress saved separately
+        loadProgress();
         this.scene.start("MainMenu");
       });
 
@@ -88,7 +101,7 @@ class Auth extends Phaser.Scene {
   }
 }
 
-// ====== MAIN MENU (based on your original) ======
+// ====== MAIN MENU ======
 class MainMenu extends Phaser.Scene {
   constructor() {
     super({ key: "MainMenu" });
@@ -105,6 +118,9 @@ class MainMenu extends Phaser.Scene {
 
     const title = isGuest ? "Main Menu (Guest)" : "Main Menu";
     this.add.text(centerX, centerY - 140, title, { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
+
+    const uname = window.piApp?.user?.username || "(not logged in)";
+    this.add.text(centerX, centerY - 110, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(centerX, centerY - 80, "Start", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5)
@@ -129,9 +145,7 @@ class MainMenu extends Phaser.Scene {
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
-    this.add.text(centerX, centerY + 120, "Market Coming soon!", { fontSize: "16px", fill: "#bbb" }).setOrigin(0.5);
-
-    // Show saved stats (client-side)
+    // Show saved stats
     this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
   }
@@ -144,7 +158,7 @@ class MainMenu extends Phaser.Scene {
   }
 }
 
-// ====== MARKET (repurposed: donation only, no buy coins) ======
+// ====== MARKET (donation only) ======
 class Market extends Phaser.Scene {
   constructor() {
     super({ key: "Market" });
@@ -162,7 +176,6 @@ class Market extends Phaser.Scene {
     this.add.text(centerX, centerY - 160, "Donate ❤️", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY - 120, "Choose an amount", { fontSize: "18px", fill: "#ddd" }).setOrigin(0.5);
 
-    // 1 / 10 / 100 / custom
     this.makeButton(centerX - 140, centerY - 60, "1π", () => this.donate(1));
     this.makeButton(centerX,       centerY - 60, "10π", () => this.donate(10));
     this.makeButton(centerX + 140, centerY - 60, "100π", () => this.donate(100));
@@ -198,20 +211,21 @@ class Market extends Phaser.Scene {
       .on("pointerdown", cb);
   }
 
-  donate(amount) {
-    this.paymentStatus.setText(`Creating donation (${amount}π)...`);
+  async donate(amount) {
+    try {
+      this.paymentStatus.setText(`Creating donation (${amount}π)...`);
 
-    window.piApp.createPayment(
-      {
-        amount,
-        memo: "Ball10 Donation",
-        metadata: { kind: "donation", amount }
-      },
-      {
+      if (!window.Ball10Payments?.donatePi) {
+        throw new Error("Ball10Payments missing. Make sure pi-payments.js is loaded in index.html.");
+      }
+
+      await window.Ball10Payments.donatePi(amount, {
         onStatus: (m) => this.paymentStatus.setText(m),
         onError: (e) => this.paymentStatus.setText(`Donation failed: ${e?.message || e}`)
-      }
-    ).catch(() => {});
+      });
+    } catch (e) {
+      this.paymentStatus.setText(`Donation failed: ${e?.message || e}`);
+    }
   }
 }
 
@@ -338,7 +352,6 @@ class PlayGame extends Phaser.Scene {
     this.physics.pause();
     this.balloons.clear(true, true);
 
-    // ✅ persist high score
     highScore = Math.max(highScore, score);
     saveProgress();
 
@@ -393,7 +406,6 @@ const config = {
   width: window.innerWidth,
   height: window.innerHeight,
   backgroundColor: "#222",
-  // ✅ Start at Auth scene (Pi login or Guest)
   scene: [Auth, MainMenu, Market, PlayGame],
   physics: {
     default: "arcade",
