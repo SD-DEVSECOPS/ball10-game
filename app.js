@@ -104,7 +104,7 @@ class PiApp {
       headers: this.getHeaders(),
       body: JSON.stringify({
         paymentId,
-        accessToken: this.accessToken || null, // worker can ignore if not needed
+        accessToken: this.accessToken || null,
       }),
     });
 
