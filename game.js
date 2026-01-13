@@ -50,7 +50,6 @@ class Auth extends Phaser.Scene {
       align: "center"
     }).setOrigin(0.5);
 
-    // Login with Pi (must be user tap)
     this.add.text(centerX, centerY, "Login with Pi", { fontSize: "26px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -74,7 +73,6 @@ class Auth extends Phaser.Scene {
         }
       });
 
-    // Guest mode
     this.add.text(centerX, centerY + 60, "Continue as Guest", { fontSize: "20px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -85,7 +83,7 @@ class Auth extends Phaser.Scene {
       });
 
     this.add.text(centerX, centerY + 120,
-      "Guest mode: Play only. Donations/Claim require Pi login.",
+      "Guest mode: Play only. Donations require Pi login.",
       { fontSize: "13px", fill: "#bbb", align: "center" }
     ).setOrigin(0.5);
   }
@@ -134,24 +132,6 @@ class MainMenu extends Phaser.Scene {
         .setInteractive()
         .on("pointerdown", () => this.scene.start("Auth"));
     }
-
-    // ✅ TESTNET A2U CLAIM BUTTON
-    this.add.text(centerX, centerY + 105, "Claim 1π (Testnet)", { fontSize: "18px", fill: "#ff0" })
-      .setOrigin(0.5)
-      .setInteractive()
-      .on("pointerdown", async () => {
-        try {
-          if (isGuest) {
-            alert("Please login with Pi first.");
-            this.scene.start("Auth");
-            return;
-          }
-          const result = await window.Ball10Payments.claimTestnet1Pi();
-          alert(`✅ Claim success!\nPayment: ${result.paymentId || ""}`);
-        } catch (e) {
-          alert("❌ " + (e?.message || e));
-        }
-      });
 
     this.add.text(centerX, centerY + 160, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(centerX, centerY + 190, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
@@ -257,7 +237,6 @@ class PlayGame extends Phaser.Scene {
       loop: true
     });
 
-    // ESC pause
     this.isPaused = false;
     this.pauseOverlay = null;
     this.input.keyboard.on("keydown-ESC", () => this.togglePause());
