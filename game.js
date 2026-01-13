@@ -273,7 +273,9 @@ class PlayGame extends Phaser.Scene {
         balance += 10;
         this.balanceText.setText(`Balance: ${balance}`);
       }
-      if (score % 100 === 0) balloonSpeed += 10;
+      if (score % 10 === 0) {
+  balloonSpeed += 35;
+}
     }
   }
 
