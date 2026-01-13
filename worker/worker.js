@@ -43,7 +43,6 @@ export default {
     // Pick correct key per caller (testnet vs mainnet)
     const piEnv = (request.headers.get("X-PI-ENV") || "").toLowerCase();
     const isTestnet = piEnv === "testnet";
-
     const PI_SERVER_KEY = isTestnet ? env.PI_SERVER_KEY_TESTNET : env.PI_SERVER_KEY;
 
     if (!PI_SERVER_KEY) {
@@ -117,20 +116,16 @@ export default {
 
     // =========================
     // A2U testnet claim: 1π
-    // Flow: /me -> create payment -> send tx -> complete -> KV lock
+    // Uses wallet address (G...) not uid
     // =========================
     if (url.pathname === "/api/claim" && request.method === "POST") {
       try {
         if (!isTestnet) {
-          return json(
-            { error: "Claim is testnet-only. Send X-PI-ENV: testnet" },
-            400
-          );
+          return json({ error: "Claim is testnet-only. Send X-PI-ENV: testnet" }, 400);
         }
 
         const { accessToken } = await request.json();
         if (!accessToken) return json({ error: "accessToken required" }, 400);
-
         if (!env.CLAIMS) return json({ error: "KV CLAIMS not bound" }, 500);
 
         const APP_WALLET_PUBLIC = env.APP_WALLET_PUBLIC_TESTNET;
@@ -153,11 +148,7 @@ export default {
 
         const meText = await meRes.text();
         let me = {};
-        try {
-          me = JSON.parse(meText);
-        } catch {
-          me = { raw: meText };
-        }
+        try { me = JSON.parse(meText); } catch { me = { raw: meText }; }
 
         if (!meRes.ok) {
           return json({ error: "Invalid accessToken", details: me }, 401);
@@ -166,57 +157,70 @@ export default {
         const uid = me?.uid || me?.user?.uid;
         const username = me?.username || me?.user?.username || null;
 
+        // 2) Extract recipient wallet address (G...)
+        const walletAddress =
+          me?.wallet_address ||
+          me?.payment_address ||
+          me?.wallet?.address ||
+          me?.user?.wallet_address ||
+          me?.user?.wallet?.address ||
+          null;
+
         if (!uid) {
-          return json({ error: "Missing uid from /me response", details: me }, 400);
+          return json({ error: "Missing uid from /me", details: me }, 400);
         }
 
-        // 2) Prevent double-claim
+        if (!walletAddress || typeof walletAddress !== "string" || !walletAddress.startsWith("G")) {
+          return json(
+            {
+              error: "Missing wallet address from /me (needed for A2U).",
+              hint: "User must have testnet wallet activated / returned by Pi API.",
+              details: me,
+            },
+            400
+          );
+        }
+
+        // 3) Prevent double-claim
         const already = await env.CLAIMS.get(uid);
         if (already) return json({ error: "Already claimed" }, 409);
 
-        // 3) Create A2U payment
+        // 4) Create A2U payment (use recipient_address instead of uid)
         const createRes = await fetch(`${PI_API_URL}/payments`, {
           method: "POST",
           headers: {
-            Authorization: `Key ${PI_SERVER_KEY}`, // testnet key here
+            Authorization: `Key ${PI_SERVER_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             amount: 1,
             memo: "Ball10 Testnet Reward",
-            metadata: { type: "a2u_testnet_claim", username },
-            uid,
+            metadata: { type: "a2u_testnet_claim", username, uid },
+            recipient_address: walletAddress
           }),
         });
 
         const createText = await createRes.text();
         let payment = {};
-        try {
-          payment = JSON.parse(createText);
-        } catch {
-          payment = { raw: createText };
-        }
+        try { payment = JSON.parse(createText); } catch { payment = { raw: createText }; }
 
         if (!createRes.ok) {
-          // If "user not found" here => PI_SERVER_KEY_TESTNET belongs to a different Pi App.
-          return json({ error: "Create payment failed", details: payment, uid }, 500);
+          return json({ error: "Create payment failed", details: payment }, 500);
         }
 
         const paymentId = payment?.identifier || payment?.paymentId || payment?.id;
-        const recipientAddress =
+        const recipient =
           payment?.recipient ||
           payment?.to_address ||
           payment?.recipient_address ||
-          payment?.recipientAddress;
+          payment?.recipientAddress ||
+          walletAddress;
 
-        if (!paymentId || !recipientAddress) {
-          return json(
-            { error: "Missing identifier/recipient in create response", details: payment },
-            500
-          );
+        if (!paymentId) {
+          return json({ error: "Missing payment identifier from create", details: payment }, 500);
         }
 
-        // 4) Send testnet chain tx
+        // 5) Send testnet chain tx (to recipient address)
         const horizon = new StellarSdk.Horizon.Server("https://api.testnet.minepi.com");
 
         const sourceAccount = await horizon.loadAccount(APP_WALLET_PUBLIC);
@@ -230,12 +234,11 @@ export default {
         })
           .addOperation(
             StellarSdk.Operation.payment({
-              destination: recipientAddress,
+              destination: recipient,
               asset: StellarSdk.Asset.native(),
               amount: "1",
             })
           )
-          // MUST include payment identifier
           .addMemo(StellarSdk.Memo.text(paymentId))
           .build();
 
@@ -248,7 +251,7 @@ export default {
           return json({ error: "Transaction submitted but txid missing", details: submitRes }, 500);
         }
 
-        // 5) Complete with txid
+        // 6) Complete with txid
         const completeRes = await fetch(`${PI_API_URL}/payments/${paymentId}/complete`, {
           method: "POST",
           headers: {
@@ -266,13 +269,10 @@ export default {
           );
         }
 
-        // 6) KV lock
-        await env.CLAIMS.put(
-          uid,
-          JSON.stringify({ claimedAt: Date.now(), username: username || "" })
-        );
+        // 7) KV lock
+        await env.CLAIMS.put(uid, JSON.stringify({ claimedAt: Date.now(), username: username || "" }));
 
-        return json({ ok: true, paymentId, txid, uid, username }, 200);
+        return json({ ok: true, paymentId, txid, uid, username, walletAddress }, 200);
       } catch (e) {
         return json({ error: e?.message || String(e) }, 500);
       }
