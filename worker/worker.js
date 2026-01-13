@@ -118,7 +118,7 @@ export default {
 
     // =========================
     // A2U testnet claim: 1π
-    // Uses wallet address (G...) not uid
+    // Allows walletAddress from client if /me doesn't return it
     // =========================
     if (url.pathname === "/api/claim" && request.method === "POST") {
       try {
@@ -126,7 +126,11 @@ export default {
           return json({ error: "Claim is testnet-only. Send X-PI-ENV: testnet" }, 400);
         }
 
-        const { accessToken } = await request.json();
+        // Accept optional walletAddress from client
+        const body = await request.json();
+        const accessToken = body?.accessToken;
+        const walletFromClient = body?.walletAddress || body?.wallet_address || null;
+
         if (!accessToken) return json({ error: "accessToken required" }, 400);
         if (!env.CLAIMS) return json({ error: "KV CLAIMS not bound" }, 500);
 
@@ -163,8 +167,8 @@ export default {
         const uid = me?.uid || me?.user?.uid;
         const username = me?.username || me?.user?.username || null;
 
-        // 2) Extract recipient wallet address (G...)
-        const walletAddress =
+        // 2) Wallet from /me
+        const walletFromMe =
           me?.wallet_address ||
           me?.payment_address ||
           me?.wallet?.address ||
@@ -172,26 +176,31 @@ export default {
           me?.user?.wallet?.address ||
           null;
 
+        const walletAddressFinal = walletFromMe || walletFromClient || null;
+
         if (!uid) {
           return json({ error: "Missing uid from /me", details: me }, 400);
         }
 
-        if (!walletAddress || typeof walletAddress !== "string" || !walletAddress.startsWith("G")) {
+        if (!walletAddressFinal || typeof walletAddressFinal !== "string" || !walletAddressFinal.startsWith("G")) {
           return json(
             {
-              error: "Missing wallet address from /me (needed for A2U).",
-              hint: "User must have testnet wallet activated / returned by Pi API.",
+              error:
+                "Wallet address not available from Pi /me. Activate/open your TESTNET wallet or provide walletAddress in request body.",
+              needed: "walletAddress (starts with G...)",
+              hint:
+                "Open Pi Wallet (testnet) once, then retry Claim. Or pass walletAddress: 'G....' in request.",
               details: me
             },
             400
           );
         }
 
-        // 3) Prevent double-claim (CLAIMS KV is your lock)
+        // 3) Prevent double-claim
         const already = await env.CLAIMS.get(uid);
         if (already) return json({ error: "Already claimed" }, 409);
 
-        // 4) Create A2U payment (use recipient_address instead of uid)
+        // 4) Create A2U payment (recipient_address)
         const createRes = await fetch(`${PI_API_URL}/payments`, {
           method: "POST",
           headers: {
@@ -202,7 +211,7 @@ export default {
             amount: 1,
             memo: "Ball10 Testnet Reward",
             metadata: { type: "a2u_testnet_claim", username, uid },
-            recipient_address: walletAddress
+            recipient_address: walletAddressFinal
           })
         });
 
@@ -219,18 +228,19 @@ export default {
         }
 
         const paymentId = payment?.identifier || payment?.paymentId || payment?.id;
+
         const recipient =
           payment?.recipient ||
           payment?.to_address ||
           payment?.recipient_address ||
           payment?.recipientAddress ||
-          walletAddress;
+          walletAddressFinal;
 
         if (!paymentId) {
           return json({ error: "Missing payment identifier from create", details: payment }, 500);
         }
 
-        // 5) Send testnet chain tx (to recipient address)
+        // 5) Send testnet chain tx
         const horizon = new StellarSdk.Horizon.Server("https://api.testnet.minepi.com");
 
         const sourceAccount = await horizon.loadAccount(APP_WALLET_PUBLIC);
@@ -279,7 +289,7 @@ export default {
         // 7) KV lock
         await env.CLAIMS.put(uid, JSON.stringify({ claimedAt: Date.now(), username: username || "" }));
 
-        return json({ ok: true, paymentId, txid, uid, username, walletAddress }, 200);
+        return json({ ok: true, paymentId, txid, uid, username, walletAddress: walletAddressFinal }, 200);
       } catch (e) {
         return json({ error: e?.message || String(e) }, 500);
       }
