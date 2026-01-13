@@ -1,23 +1,35 @@
 class PiApp {
   constructor() {
-    this.user = null;
+    this.user = null;          // { uid, username }
     this.accessToken = null;
 
+    // Worker backend
     this.API_BASE = "https://pi-payment-backend.sdswat93.workers.dev";
 
     this.paymentMetaById = {};
     this.hasPaymentsPermission = false;
   }
 
-  getEnv() {
-    return window.BALL10_PI_ENV || "mainnet";
-  }
+  // Always keep this consistent
+  setUserFromAuth(auth) {
+    const rawUser = auth?.user || null;
 
-  getHeaders() {
-    return {
-      "Content-Type": "application/json",
-      "X-PI-ENV": this.getEnv()
-    };
+    const uid =
+      rawUser?.uid ||
+      rawUser?.pi_uid ||
+      rawUser?.user?.uid ||
+      null;
+
+    const username =
+      rawUser?.username ||
+      rawUser?.user?.username ||
+      null;
+
+    this.user = uid ? { uid, username: username || "" } : null;
+    this.accessToken = auth?.accessToken || null;
+
+    if (!this.user?.uid) throw new Error("Authentication failed (missing uid).");
+    if (!this.accessToken) throw new Error("Authentication failed (missing accessToken).");
   }
 
   async authenticate(scopes = ["username"]) {
@@ -26,24 +38,20 @@ class PiApp {
 
     const auth = await Pi.authenticate(scopes, this.onIncompletePaymentFound.bind(this));
 
-    const rawUser = auth?.user || null;
-    const uid = rawUser?.uid || rawUser?.pi_uid || null;
-    const username = rawUser?.username || null;
+    this.setUserFromAuth(auth);
 
-    this.user = uid ? { uid, username } : rawUser;
-    this.accessToken = auth?.accessToken || null;
+    if (Array.isArray(scopes) && scopes.includes("payments")) {
+      this.hasPaymentsPermission = true;
+    }
 
-    if (!this.accessToken) throw new Error("Authentication failed (missing accessToken).");
-    if (!this.user || !this.user.uid) throw new Error("Authentication failed (missing uid).");
-
-    this.hasPaymentsPermission = Array.isArray(scopes) && scopes.includes("payments");
     return auth;
   }
 
   async ensurePaymentsPermission() {
     if (this.hasPaymentsPermission) return true;
+
+    // Ask for username+payments only when donating
     await this.authenticate(["username", "payments"]);
-    this.hasPaymentsPermission = true;
     return true;
   }
 
@@ -80,7 +88,7 @@ class PiApp {
       },
 
       onCancel: () => uiCallbacks?.onStatus?.("Donation cancelled."),
-      onError: (error) => uiCallbacks?.onError?.(error)
+      onError: (error) => uiCallbacks?.onError?.(error),
     };
 
     const maybePromise = Pi.createPayment(paymentData, callbacks);
@@ -99,8 +107,8 @@ class PiApp {
   async approvePayment(paymentId) {
     const res = await fetch(`${this.API_BASE}/api/approve-payment`, {
       method: "POST",
-      headers: this.getHeaders(),
-      body: JSON.stringify({ paymentId })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId }),
     });
 
     if (!res.ok) {
@@ -113,8 +121,8 @@ class PiApp {
   async completePayment(paymentId, txid) {
     const res = await fetch(`${this.API_BASE}/api/complete-payment`, {
       method: "POST",
-      headers: this.getHeaders(),
-      body: JSON.stringify({ paymentId, txid: txid || null })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId, txid: txid || null }),
     });
 
     if (!res.ok) {
