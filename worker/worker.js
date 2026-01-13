@@ -8,7 +8,7 @@ export default {
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-PI-ENV",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-PI-ENV"
     };
 
     if (request.method === "OPTIONS") {
@@ -18,13 +18,13 @@ export default {
     const json = (obj, status = 200) =>
       new Response(JSON.stringify(obj), {
         status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
 
     const text = (msg, status = 400) =>
       new Response(msg, {
         status,
-        headers: { ...corsHeaders, "Content-Type": "text/plain" },
+        headers: { ...corsHeaders, "Content-Type": "text/plain" }
       });
 
     // Root
@@ -36,12 +36,13 @@ export default {
     }
 
     // Health
-if (url.pathname === "/health") {
-return Response.json({
-  ok: true,
-  source: "GIT_ACTIVE_DEPLOY",
-  ts: Date.now()
-});
+    if (url.pathname === "/health") {
+      return json({
+        ok: true,
+        source: "GIT_ACTIVE_DEPLOY",
+        ts: Date.now()
+      });
+    }
 
     // Pick correct key per caller (testnet vs mainnet)
     const piEnv = (request.headers.get("X-PI-ENV") || "").toLowerCase();
@@ -50,9 +51,7 @@ return Response.json({
 
     if (!PI_SERVER_KEY) {
       return text(
-        isTestnet
-          ? "Missing PI_SERVER_KEY_TESTNET secret."
-          : "Missing PI_SERVER_KEY secret.",
+        isTestnet ? "Missing PI_SERVER_KEY_TESTNET secret." : "Missing PI_SERVER_KEY secret.",
         500
       );
     }
@@ -71,9 +70,9 @@ return Response.json({
           method: "POST",
           headers: {
             Authorization: `Key ${PI_SERVER_KEY}`,
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({})
         });
 
         const body = await resp.text();
@@ -81,7 +80,7 @@ return Response.json({
 
         return new Response(body, {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       } catch (e) {
         return text(`Approve error: ${e?.message || e}`, 500);
@@ -100,9 +99,9 @@ return Response.json({
           method: "POST",
           headers: {
             Authorization: `Key ${PI_SERVER_KEY}`,
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify({ txid: txid || null }),
+          body: JSON.stringify({ txid: txid || null })
         });
 
         const body = await resp.text();
@@ -110,7 +109,7 @@ return Response.json({
 
         return new Response(body, {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       } catch (e) {
         return text(`Complete error: ${e?.message || e}`, 500);
@@ -138,7 +137,7 @@ return Response.json({
           return json(
             {
               error: "Missing app wallet secrets for testnet A2U",
-              needed: ["APP_WALLET_PUBLIC_TESTNET", "APP_WALLET_SEED_TESTNET"],
+              needed: ["APP_WALLET_PUBLIC_TESTNET", "APP_WALLET_SEED_TESTNET"]
             },
             500
           );
@@ -146,12 +145,16 @@ return Response.json({
 
         // 1) Verify user
         const meRes = await fetch(`${PI_API_URL}/me`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${accessToken}` }
         });
 
         const meText = await meRes.text();
         let me = {};
-        try { me = JSON.parse(meText); } catch { me = { raw: meText }; }
+        try {
+          me = JSON.parse(meText);
+        } catch {
+          me = { raw: meText };
+        }
 
         if (!meRes.ok) {
           return json({ error: "Invalid accessToken", details: me }, 401);
@@ -178,13 +181,13 @@ return Response.json({
             {
               error: "Missing wallet address from /me (needed for A2U).",
               hint: "User must have testnet wallet activated / returned by Pi API.",
-              details: me,
+              details: me
             },
             400
           );
         }
 
-        // 3) Prevent double-claim
+        // 3) Prevent double-claim (CLAIMS KV is your lock)
         const already = await env.CLAIMS.get(uid);
         if (already) return json({ error: "Already claimed" }, 409);
 
@@ -193,19 +196,23 @@ return Response.json({
           method: "POST",
           headers: {
             Authorization: `Key ${PI_SERVER_KEY}`,
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({
             amount: 1,
             memo: "Ball10 Testnet Reward",
             metadata: { type: "a2u_testnet_claim", username, uid },
             recipient_address: walletAddress
-          }),
+          })
         });
 
         const createText = await createRes.text();
         let payment = {};
-        try { payment = JSON.parse(createText); } catch { payment = { raw: createText }; }
+        try {
+          payment = JSON.parse(createText);
+        } catch {
+          payment = { raw: createText };
+        }
 
         if (!createRes.ok) {
           return json({ error: "Create payment failed", details: payment }, 500);
@@ -233,13 +240,13 @@ return Response.json({
         const tx = new StellarSdk.TransactionBuilder(sourceAccount, {
           fee,
           networkPassphrase: "Pi Testnet",
-          timebounds,
+          timebounds
         })
           .addOperation(
             StellarSdk.Operation.payment({
               destination: recipient,
               asset: StellarSdk.Asset.native(),
-              amount: "1",
+              amount: "1"
             })
           )
           .addMemo(StellarSdk.Memo.text(paymentId))
@@ -259,17 +266,14 @@ return Response.json({
           method: "POST",
           headers: {
             Authorization: `Key ${PI_SERVER_KEY}`,
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify({ txid }),
+          body: JSON.stringify({ txid })
         });
 
         const completeText = await completeRes.text();
         if (!completeRes.ok) {
-          return json(
-            { error: "Complete failed", details: completeText, paymentId, txid },
-            500
-          );
+          return json({ error: "Complete failed", details: completeText, paymentId, txid }, 500);
         }
 
         // 7) KV lock
@@ -282,5 +286,5 @@ return Response.json({
     }
 
     return text("Not Found", 404);
-  },
+  }
 };
