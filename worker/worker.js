@@ -59,7 +59,9 @@ export default {
     // =========================
     if (url.pathname === "/api/approve-payment" && request.method === "POST") {
       try {
-        const { paymentId } = await request.json();
+        const body = await request.json().catch(() => ({}));
+        const paymentId = body?.paymentId;
+
         if (!paymentId) return text("paymentId is required", 400);
 
         const resp = await fetch(`${PI_API_URL}/payments/${paymentId}/approve`, {
@@ -71,10 +73,10 @@ export default {
           body: JSON.stringify({})
         });
 
-        const body = await resp.text();
-        if (!resp.ok) return text(body || "Approve failed", resp.status);
+        const respText = await resp.text().catch(() => "");
+        if (!resp.ok) return text(respText || "Approve failed", resp.status);
 
-        return new Response(body, {
+        return new Response(respText, {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
@@ -88,7 +90,10 @@ export default {
     // =========================
     if (url.pathname === "/api/complete-payment" && request.method === "POST") {
       try {
-        const { paymentId, txid } = await request.json();
+        const body = await request.json().catch(() => ({}));
+        const paymentId = body?.paymentId;
+        const txid = body?.txid || null;
+
         if (!paymentId) return text("paymentId is required", 400);
 
         const resp = await fetch(`${PI_API_URL}/payments/${paymentId}/complete`, {
@@ -97,13 +102,13 @@ export default {
             Authorization: `Key ${PI_SERVER_KEY}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ txid: txid || null })
+          body: JSON.stringify({ txid })
         });
 
-        const body = await resp.text();
-        if (!resp.ok) return text(body || "Complete failed", resp.status);
+        const respText = await resp.text().catch(() => "");
+        if (!resp.ok) return text(respText || "Complete failed", resp.status);
 
-        return new Response(body, {
+        return new Response(respText, {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
@@ -114,7 +119,13 @@ export default {
 
     // =========================
     // A2U testnet claim: 1π
-    // ✅ Correct flow: create payment with uid, use returned recipient address
+    // ✅ Correct flow:
+    //  - verify user via /me (Bearer accessToken)
+    //  - create A2U payment via Pi API using uid (NOT recipient_address)
+    //  - Pi returns recipient address
+    //  - send chain tx to recipient
+    //  - complete payment with txid
+    //  - lock claim in KV CLAIMS by uid
     // =========================
     if (url.pathname === "/api/claim" && request.method === "POST") {
       try {
@@ -122,8 +133,9 @@ export default {
           return json({ error: "Claim is testnet-only. Send X-PI-ENV: testnet" }, 400);
         }
 
-        const body = await request.json();
+        const body = await request.json().catch(() => ({}));
         const accessToken = body?.accessToken;
+
         if (!accessToken) return json({ error: "accessToken required" }, 400);
         if (!env.CLAIMS) return json({ error: "KV CLAIMS not bound" }, 500);
 
@@ -145,9 +157,13 @@ export default {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
 
-        const meText = await meRes.text();
+        const meText = await meRes.text().catch(() => "");
         let me = {};
-        try { me = JSON.parse(meText); } catch { me = { raw: meText }; }
+        try {
+          me = JSON.parse(meText);
+        } catch {
+          me = { raw: meText };
+        }
 
         if (!meRes.ok) {
           return json({ error: "Invalid accessToken", details: me }, 401);
@@ -160,11 +176,11 @@ export default {
           return json({ error: "Missing uid from /me", details: me }, 400);
         }
 
-        // 2) Prevent double-claim
+        // 2) Prevent double claim
         const already = await env.CLAIMS.get(uid);
         if (already) return json({ error: "Already claimed" }, 409);
 
-        // 3) Create A2U payment using uid (official)
+        // 3) Create A2U payment using uid (THIS FIXES your 'user not found')
         const createRes = await fetch(`${PI_API_URL}/payments`, {
           method: "POST",
           headers: {
@@ -179,22 +195,34 @@ export default {
           })
         });
 
-        const createText = await createRes.text();
+        const createText = await createRes.text().catch(() => "");
         let payment = {};
-        try { payment = JSON.parse(createText); } catch { payment = { raw: createText }; }
+        try {
+          payment = JSON.parse(createText);
+        } catch {
+          payment = { raw: createText };
+        }
 
         if (!createRes.ok) {
           return json({ error: "Create payment failed", details: payment }, 500);
         }
 
         const paymentId = payment?.identifier || payment?.paymentId || payment?.id;
-        const recipient = payment?.recipient || payment?.to_address || payment?.recipient_address;
+        const recipient =
+          payment?.recipient ||
+          payment?.to_address ||
+          payment?.recipient_address ||
+          payment?.recipientAddress ||
+          null;
 
         if (!paymentId || !recipient) {
-          return json({ error: "Create payment missing identifier/recipient", details: payment }, 500);
+          return json(
+            { error: "Create payment missing identifier/recipient", details: payment },
+            500
+          );
         }
 
-        // 4) Send testnet chain tx to recipient address returned by Pi
+        // 4) Send testnet chain tx to recipient returned by Pi
         const horizon = new StellarSdk.Horizon.Server("https://api.testnet.minepi.com");
 
         const sourceAccount = await horizon.loadAccount(APP_WALLET_PUBLIC);
@@ -225,7 +253,7 @@ export default {
           return json({ error: "Transaction submitted but txid missing", details: submitRes }, 500);
         }
 
-        // 5) Complete with txid
+        // 5) Complete payment with txid
         const completeRes = await fetch(`${PI_API_URL}/payments/${paymentId}/complete`, {
           method: "POST",
           headers: {
@@ -235,13 +263,19 @@ export default {
           body: JSON.stringify({ txid })
         });
 
-        const completeText = await completeRes.text();
+        const completeText = await completeRes.text().catch(() => "");
         if (!completeRes.ok) {
-          return json({ error: "Complete failed", details: completeText, paymentId, txid }, 500);
+          return json(
+            { error: "Complete failed", details: completeText, paymentId, txid },
+            500
+          );
         }
 
-        // 6) KV lock
-        await env.CLAIMS.put(uid, JSON.stringify({ claimedAt: Date.now(), username: username || "" }));
+        // 6) KV lock claim
+        await env.CLAIMS.put(
+          uid,
+          JSON.stringify({ claimedAt: Date.now(), username: username || "" })
+        );
 
         return json({ ok: true, paymentId, txid, uid, username, recipient }, 200);
       } catch (e) {
