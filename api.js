@@ -52,7 +52,7 @@
     return request("/api/leaderboard", { method: "GET" });
   }
 
-  // ✅ NEW: Fetch words list from DB
+  // ✅ NEW
   async function words() {
     return request("/api/words", { method: "GET" });
   }
