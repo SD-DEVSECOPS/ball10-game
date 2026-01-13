@@ -1,34 +1,32 @@
 let score = 0;
 let highScore = 0;
-let balance = 100;
+let balance = 0; // ✅ not hardcoded to 100 anymore
 let poppedBalloons = 0;
 let gameOverFlag = false;
 let balloonSpeed = 150;
 
-function loadLocalProgress() {
+async function initUserStateFromDbIfLoggedIn() {
   try {
-    const u = window.Ball10Auth.getUser();
-    if (!u) return;
-    if (Number.isFinite(u.highscore)) highScore = u.highscore;
-    if (Number.isFinite(u.balance)) balance = u.balance;
+    // If user has token, pull latest from DB
+    const user = await window.Ball10Auth.restoreFromDb();
+    if (user) {
+      highScore = Number(user.highscore || 0);
+      balance = Number(user.balance || 0);
+      return;
+    }
   } catch (_) {}
+
+  // Not logged in => offline placeholder (you can force login instead if you want)
+  highScore = 0;
+  balance = 100; // offline only
 }
 
-function syncLocalUser(highscore, newBalance) {
-  const u = window.Ball10Auth.getUser();
-  if (!u) return;
-  const updated = { ...u, highscore, balance: newBalance };
-  window.Ball10Auth.setSession(window.Ball10Auth.getToken(), updated);
-}
-
-async function saveToServer() {
+async function saveToDb() {
   const token = window.Ball10Auth.getToken();
   if (!token) return;
-
   try {
     await window.Ball10API.save(token, highScore, balance);
   } catch (e) {
-    // keep silent; don't break game if API fails
     console.warn("Save failed:", e?.message || e);
   }
 }
@@ -53,7 +51,7 @@ class Auth extends Phaser.Scene {
         this.status.setText("Opening login...");
         try {
           await window.Ball10Auth.promptLoginOrRegister();
-          loadLocalProgress();
+          await initUserStateFromDbIfLoggedIn();
           this.scene.start("MainMenu");
         } catch (e) {
           const msg = e?.message || String(e);
@@ -65,14 +63,13 @@ class Auth extends Phaser.Scene {
     this.add.text(cx, cy + 70, "Continue Offline", { fontSize: "20px", fill: "#ff0" })
       .setOrigin(0.5)
       .setInteractive()
-      .on("pointerdown", () => {
-        // offline = local only
-        loadLocalProgress();
+      .on("pointerdown", async () => {
+        await initUserStateFromDbIfLoggedIn();
         this.scene.start("MainMenu");
       });
 
     this.add.text(cx, cy + 120,
-      "Offline: saves only on this device. Login enables leaderboard + cloud saves.",
+      "Login enables cloud stats + leaderboard. Offline uses local placeholder.",
       { fontSize: "13px", fill: "#bbb", align: "center" }
     ).setOrigin(0.5);
   }
@@ -90,10 +87,10 @@ class MainMenu extends Phaser.Scene {
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
 
-    this.add.text(cx, cy - 160, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
-
     const user = window.Ball10Auth.getUser();
     const uname = user?.username || "(offline)";
+
+    this.add.text(cx, cy - 160, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(cx, cy - 130, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
     this.add.text(cx, cy - 95, "Start", { fontSize: "22px", fill: "#0f0" })
@@ -133,7 +130,7 @@ class MainMenu extends Phaser.Scene {
         const lines = list.map((r, i) => `${i + 1}. ${r.username} — ${r.highscore}`);
         this.lbText.setText("Leaderboard:\n" + lines.join("\n"));
       }
-    } catch (e) {
+    } catch {
       this.lbText.setText("Leaderboard:\n(unavailable)");
     }
   }
@@ -266,11 +263,8 @@ class PlayGame extends Phaser.Scene {
 
     highScore = Math.max(highScore, score);
 
-    // ✅ sync local cached user
-    syncLocalUser(highScore, balance);
-
-    // ✅ save to server if logged in (does nothing offline)
-    await saveToServer();
+    // ✅ save to DB if logged in
+    await saveToDb();
 
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
@@ -303,11 +297,7 @@ class PlayGame extends Phaser.Scene {
   async continueGame() {
     if (balance >= 10) {
       balance -= 10;
-
-      // keep cached user in sync
-      syncLocalUser(highScore, balance);
-      await saveToServer();
-
+      await saveToDb();
       this.scene.restart();
     } else {
       alert("Not enough points!");
@@ -327,15 +317,11 @@ const config = {
   height: window.innerHeight,
   backgroundColor: "#222",
   scene: [Auth, MainMenu, PlayGame],
-  physics: {
-    default: "arcade",
-    arcade: { debug: false }
-  }
+  physics: { default: "arcade", arcade: { debug: false } }
 };
 
-loadLocalProgress();
-const game = new Phaser.Game(config);
-
-window.addEventListener("resize", () => {
-  game.scale.resize(window.innerWidth, window.innerHeight);
-});
+(async () => {
+  await initUserStateFromDbIfLoggedIn();
+  const game = new Phaser.Game(config);
+  window.addEventListener("resize", () => game.scale.resize(window.innerWidth, window.innerHeight));
+})();
