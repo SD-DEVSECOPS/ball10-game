@@ -52,5 +52,10 @@
     return request("/api/leaderboard", { method: "GET" });
   }
 
-  window.Ball10API = { register, login, me, save, leaderboard };
+  // ✅ NEW: Fetch words list from DB
+  async function words() {
+    return request("/api/words", { method: "GET" });
+  }
+
+  window.Ball10API = { register, login, me, save, leaderboard, words };
 })();
