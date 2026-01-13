@@ -37,13 +37,11 @@ export default {
 
     // Health
 if (url.pathname === "/health") {
-  return json({
-    ok: true,
-    service: "pi-payment-backend",
-    version: "GITHUB_DEPLOY_2026_01_13_A"
-  }, 200);
-}
-
+return Response.json({
+  ok: true,
+  source: "GIT_ACTIVE_DEPLOY",
+  ts: Date.now()
+});
 
     // Pick correct key per caller (testnet vs mainnet)
     const piEnv = (request.headers.get("X-PI-ENV") || "").toLowerCase();
