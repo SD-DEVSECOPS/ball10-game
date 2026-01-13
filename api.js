@@ -1,10 +1,6 @@
 (function () {
   const BASE = window.BALL10_API_BASE;
 
-  if (!BASE) {
-    console.error("BALL10_API_BASE missing in index.html");
-  }
-
   async function request(path, opts = {}) {
     const res = await fetch(`${BASE}${path}`, {
       ...opts,
@@ -38,6 +34,13 @@
     });
   }
 
+  async function me(token) {
+    return request("/api/me", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+  }
+
   async function save(token, score, balance) {
     return request("/api/save", {
       method: "POST",
@@ -49,5 +52,5 @@
     return request("/api/leaderboard", { method: "GET" });
   }
 
-  window.Ball10API = { register, login, save, leaderboard };
+  window.Ball10API = { register, login, me, save, leaderboard };
 })();
