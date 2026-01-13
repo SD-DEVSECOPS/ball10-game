@@ -126,7 +126,6 @@ export default {
           return json({ error: "Claim is testnet-only. Send X-PI-ENV: testnet" }, 400);
         }
 
-        // Accept optional walletAddress from client
         const body = await request.json();
         const accessToken = body?.accessToken;
         const walletFromClient = body?.walletAddress || body?.wallet_address || null;
@@ -167,7 +166,6 @@ export default {
         const uid = me?.uid || me?.user?.uid;
         const username = me?.username || me?.user?.username || null;
 
-        // 2) Wallet from /me
         const walletFromMe =
           me?.wallet_address ||
           me?.payment_address ||
@@ -182,7 +180,11 @@ export default {
           return json({ error: "Missing uid from /me", details: me }, 400);
         }
 
-        if (!walletAddressFinal || typeof walletAddressFinal !== "string" || !walletAddressFinal.startsWith("G")) {
+        if (
+          !walletAddressFinal ||
+          typeof walletAddressFinal !== "string" ||
+          !walletAddressFinal.startsWith("G")
+        ) {
           return json(
             {
               error:
