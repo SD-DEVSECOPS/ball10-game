@@ -287,7 +287,7 @@ attachWordTextToBalloon(balloon) {
 
   // ✅ White text (high contrast on blue balloon)
   const styleTop = {
-    fontSize: "14px",
+    fontSize: "16px",
     fill: "#ffffff",
     fontStyle: "bold",
     stroke: "#000000",
@@ -295,7 +295,7 @@ attachWordTextToBalloon(balloon) {
   };
 
   const styleBot = {
-    fontSize: "13px",
+    fontSize: "16px",
     fill: "#ffffff",
     stroke: "#000000",
     strokeThickness: 2
