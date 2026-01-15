@@ -26,10 +26,10 @@ let wordsLoaded = false;
 
 function getGoldPercentBySpeed(speed) {
   // ✅ speed here is the game's current speed variable (balloonSpeed)
-  if (speed >= 600) return 7;
-  if (speed >= 400) return 5;
-  if (speed >= 250) return 4;
-  return 3;
+  if (speed >= 600) return 5;
+  if (speed >= 400) return 3;
+  if (speed >= 250) return 2;
+  return 1;
 }
 
 function clampInt(n, min, max) {
