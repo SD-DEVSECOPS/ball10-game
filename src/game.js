@@ -144,10 +144,15 @@ class Auth extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", async () => {
-        await initUserStateFromDbIfLoggedIn();
+        // ✅ IMPORTANT: clear any existing session so guest cannot save to DB
+        window.Ball10Auth.logout();
+
+        // Guest local state
         isGuest = true;
         highScore = 0;
         balance = 100;
+
+        await loadWordsOnce();
         this.scene.start("MainMenu");
       });
 
@@ -163,9 +168,9 @@ class MainMenu extends Phaser.Scene {
   constructor() { super({ key: "MainMenu" }); }
 
   preload() {
-  this.load.image("balloon", "skins/balloon.png");
-  this.load.image("redBalloon", "skins/red_balloon.png");
-  this.load.image("goldBalloon", "skins/gold_balloon.png");
+    this.load.image("balloon", "skins/balloon.png");
+    this.load.image("redBalloon", "skins/red_balloon.png");
+    this.load.image("goldBalloon", "skins/gold_balloon.png");
   }
 
   async create() {
@@ -235,9 +240,10 @@ class PlayGame extends Phaser.Scene {
   constructor() { super({ key: "PlayGame" }); }
 
   preload() {
-    this.load.image("balloon", "balloon.png");
-    this.load.image("redBalloon", "red_balloon.png");
-    this.load.image("goldBalloon", "gold_balloon.png");
+    // ✅ FIX: must match /skins folder
+    this.load.image("balloon", "skins/balloon.png");
+    this.load.image("redBalloon", "skins/red_balloon.png");
+    this.load.image("goldBalloon", "skins/gold_balloon.png");
   }
 
   create() {
