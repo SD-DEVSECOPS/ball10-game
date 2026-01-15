@@ -3,14 +3,37 @@ let highScore = 0;
 let balance = 0;
 let poppedBalloons = 0;
 let gameOverFlag = false;
-let balloonSpeed = 150;
+
+// Base speed
+const BASE_SPEED = 150;
+let balloonSpeed = BASE_SPEED;
 
 // Track guest mode (DB only if logged in)
 let isGuest = true;
 
-// ✅ Words cache (loaded once)
+// Words cache (loaded once)
 let wordPairs = [];
 let wordsLoaded = false;
+
+// GOLD cooldown: after a GOLD is CLICKED, require 8 BLUE spawns before gold can spawn again
+let goldBlueCooldown = 0;
+const GOLD_BLUE_COOLDOWN_COUNT = 8;
+
+// Spawn tuning
+const RED_PERCENT = 9; // fixed red chance (%)
+
+function getGoldPercentBySpeed(speed) {
+  if (speed >= 600) return 7;
+  if (speed >= 400) return 5;
+  if (speed >= 250) return 4;
+  return 3;
+}
+
+function clampInt(n, min, max) {
+  n = Math.floor(Number(n || 0));
+  if (Number.isNaN(n)) n = 0;
+  return Math.max(min, Math.min(max, n));
+}
 
 function pickRandomWordPair() {
   if (!wordPairs || wordPairs.length === 0) return null;
@@ -31,6 +54,7 @@ async function loadWordsOnce() {
         en: String(w.en || "").trim()
       }))
       .filter(w => w.de && w.en);
+
     console.log("Words loaded:", wordPairs.length);
   } catch (e) {
     console.warn("Words load failed:", e?.message || e);
@@ -138,6 +162,7 @@ class MainMenu extends Phaser.Scene {
   preload() {
     this.load.image("balloon", "balloon.png");
     this.load.image("redBalloon", "red_balloon.png");
+    this.load.image("goldBalloon", "gold_balloon.png"); // ✅ NEW
   }
 
   async create() {
@@ -152,7 +177,6 @@ class MainMenu extends Phaser.Scene {
     this.add.text(cx, cy - 160, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(cx, cy - 130, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
-    // Start button always
     this.add.text(cx, cy - 95, "Start", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
@@ -161,7 +185,6 @@ class MainMenu extends Phaser.Scene {
     this.add.text(cx, cy - 40, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(cx, cy - 15, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
-    // If logged in: show ONLY logout
     if (user) {
       this.add.text(cx, cy + 25, "Logout", { fontSize: "18px", fill: "#ff0" })
         .setOrigin(0.5)
@@ -198,7 +221,8 @@ class MainMenu extends Phaser.Scene {
   startGame() {
     score = 0;
     poppedBalloons = 0;
-    balloonSpeed = 150;
+    balloonSpeed = BASE_SPEED;
+    goldBlueCooldown = 0;
     this.scene.start("PlayGame");
   }
 }
@@ -210,6 +234,7 @@ class PlayGame extends Phaser.Scene {
   preload() {
     this.load.image("balloon", "balloon.png");
     this.load.image("redBalloon", "red_balloon.png");
+    this.load.image("goldBalloon", "gold_balloon.png"); // ✅ NEW
   }
 
   create() {
@@ -272,7 +297,8 @@ class PlayGame extends Phaser.Scene {
     this.hidePauseMenu();
     score = 0;
     poppedBalloons = 0;
-    balloonSpeed = 150;
+    balloonSpeed = BASE_SPEED;
+    goldBlueCooldown = 0;
     this.scene.start("MainMenu");
   }
 
@@ -280,7 +306,6 @@ class PlayGame extends Phaser.Scene {
     const pair = pickRandomWordPair();
     if (!pair) return;
 
-    // ✅ White text + black outline
     const styleTop = {
       fontSize: "16px",
       fill: "#ffffff",
@@ -296,7 +321,7 @@ class PlayGame extends Phaser.Scene {
     };
 
     const t1 = this.add.text(balloon.x, balloon.y - 18, pair.de, styleTop).setOrigin(0.5);
-    const t2 = this.add.text(balloon.x, balloon.y + 2, pair.en, styleBot).setOrigin(0.5);
+    const t2 = this.add.text(balloon.x, balloon.y + 6, pair.en, styleBot).setOrigin(0.5);
 
     t1.setDepth(50);
     t2.setDepth(50);
@@ -316,44 +341,85 @@ class PlayGame extends Phaser.Scene {
     }
   }
 
+  pickBalloonType() {
+    let goldPercent = getGoldPercentBySpeed(balloonSpeed);
+    const redPercent = RED_PERCENT;
+
+    // ✅ Gold disabled during cooldown (cooldown starts ONLY when gold is clicked)
+    if (goldBlueCooldown > 0) goldPercent = 0;
+
+    let bluePercent = 100 - redPercent - goldPercent;
+    bluePercent = clampInt(bluePercent, 0, 100);
+
+    const r = Math.random() * 100;
+
+    if (r < goldPercent) return "goldBalloon";
+    if (r < goldPercent + redPercent) return "redBalloon";
+    return "balloon";
+  }
+
   dropBalloon() {
     if (gameOverFlag || this.isPaused) return;
 
     const x = Phaser.Math.Between(50, this.cameras.main.width - 50);
-    const balloonType = score >= 20 && Math.random() < 0.05 ? "redBalloon" : "balloon";
-    const balloon = this.balloons.create(x, 0, balloonType);
 
-    balloon.setVelocityY(balloonSpeed)
+    const type = this.pickBalloonType();
+    const balloon = this.balloons.create(x, 0, type);
+
+    const vy = (type === "goldBalloon") ? 900 : balloonSpeed;
+
+    balloon.setVelocityY(vy)
       .setDisplaySize(80, 120)
       .setInteractive({ useHandCursor: true })
       .on("pointerdown", () => this.handleBalloonClick(balloon));
 
-    if (balloonType === "balloon") {
+    // Words only on BLUE balloon
+    if (type === "balloon") {
       this.attachWordTextToBalloon(balloon);
+
+      // ✅ Decrement cooldown ONLY when a BLUE balloon spawns
+      if (goldBlueCooldown > 0) goldBlueCooldown--;
     }
   }
 
   handleBalloonClick(balloon) {
     if (gameOverFlag || this.isPaused) return;
 
-    if (balloon.texture.key === "redBalloon") {
+    const type = balloon.texture.key; // ✅ this is texture name, not keyboard
+
+    // RED: click => game over
+    if (type === "redBalloon") {
       this.gameOver();
-    } else {
-      score++;
-      this.scoreText.setText(`Score: ${score}`);
+      return;
+    }
+
+    // GOLD: click => reduce speed + start cooldown
+    if (type === "goldBalloon") {
+      balloonSpeed = Math.max(BASE_SPEED, balloonSpeed - 80);
+
+      // ✅ cooldown starts ONLY when gold is successfully clicked
+      goldBlueCooldown = GOLD_BLUE_COOLDOWN_COUNT;
 
       this.destroyBalloonTexts(balloon);
       balloon.destroy();
+      return;
+    }
 
-      if (++poppedBalloons % 5000 === 0) {
-        balance += 10;
-        this.balanceText.setText(`Balance: ${balance}`);
-      }
+    // BLUE: normal rules
+    score++;
+    this.scoreText.setText(`Score: ${score}`);
 
-      // ✅ +35 every 10 points
-      if (score % 10 === 0) {
-        balloonSpeed += 35;
-      }
+    this.destroyBalloonTexts(balloon);
+    balloon.destroy();
+
+    if (++poppedBalloons % 5000 === 0) {
+      balance += 10;
+      this.balanceText.setText(`Balance: ${balance}`);
+    }
+
+    // +35 every 10 points
+    if (score % 10 === 0) {
+      balloonSpeed += 35;
     }
   }
 
@@ -363,23 +429,35 @@ class PlayGame extends Phaser.Scene {
     this.balloons.children.iterate(balloon => {
       if (!balloon) return;
 
+      // follow word text (only for blue balloons)
       if (balloon.wordTextTop) {
         balloon.wordTextTop.x = balloon.x;
         balloon.wordTextTop.y = balloon.y - 18;
       }
       if (balloon.wordTextBottom) {
         balloon.wordTextBottom.x = balloon.x;
-        balloon.wordTextBottom.y = balloon.y + 2;
+        balloon.wordTextBottom.y = balloon.y + 6;
       }
 
-      if (balloon.y > this.cameras.main.height && balloon.texture.key !== "redBalloon") {
+      // ✅ Game over ONLY if a BLUE balloon reaches bottom
+      if (balloon.y > this.cameras.main.height && balloon.texture.key === "balloon") {
         this.gameOver();
+        return;
+      }
+
+      // ✅ Cleanup offscreen GOLD/RED (no effect if missed)
+      if (balloon.y > this.cameras.main.height + 150 &&
+          (balloon.texture.key === "goldBalloon" || balloon.texture.key === "redBalloon")) {
+        this.destroyBalloonTexts(balloon);
+        balloon.destroy();
       }
     });
   }
 
   async gameOver() {
+    if (gameOverFlag) return;
     gameOverFlag = true;
+
     this.physics.pause();
 
     this.balloons.children.iterate(balloon => {
@@ -415,7 +493,8 @@ class PlayGame extends Phaser.Scene {
   restartGame() {
     score = 0;
     poppedBalloons = 0;
-    balloonSpeed = 150;
+    balloonSpeed = BASE_SPEED;
+    goldBlueCooldown = 0;
     this.scene.restart();
   }
 
