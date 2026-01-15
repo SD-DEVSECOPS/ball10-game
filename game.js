@@ -163,9 +163,9 @@ class MainMenu extends Phaser.Scene {
   constructor() { super({ key: "MainMenu" }); }
 
   preload() {
-    this.load.image("balloon", "balloon.png");
-    this.load.image("redBalloon", "red_balloon.png");
-    this.load.image("goldBalloon", "gold_balloon.png");
+  this.load.image("balloon", "skins/balloon.png");
+  this.load.image("redBalloon", "skins/red_balloon.png");
+  this.load.image("goldBalloon", "skins/gold_balloon.png");
   }
 
   async create() {
