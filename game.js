@@ -8,6 +8,15 @@ let gameOverFlag = false;
 const BASE_SPEED = 150;
 let balloonSpeed = BASE_SPEED;
 
+// Gold behavior
+const GOLD_SPEED = 500;        // ✅ changed from 900 to 500
+const GOLD_SLOW_AMOUNT = 80;   // click reward
+let goldBlueCooldown = 0;
+const GOLD_BLUE_COOLDOWN_COUNT = 8;
+
+// Spawn tuning
+const RED_PERCENT = 9; // fixed red chance (%)
+
 // Track guest mode (DB only if logged in)
 let isGuest = true;
 
@@ -15,14 +24,8 @@ let isGuest = true;
 let wordPairs = [];
 let wordsLoaded = false;
 
-// GOLD cooldown: after a GOLD is CLICKED, require 8 BLUE spawns before gold can spawn again
-let goldBlueCooldown = 0;
-const GOLD_BLUE_COOLDOWN_COUNT = 8;
-
-// Spawn tuning
-const RED_PERCENT = 9; // fixed red chance (%)
-
 function getGoldPercentBySpeed(speed) {
+  // ✅ speed here is the game's current speed variable (balloonSpeed)
   if (speed >= 600) return 7;
   if (speed >= 400) return 5;
   if (speed >= 250) return 4;
@@ -162,7 +165,7 @@ class MainMenu extends Phaser.Scene {
   preload() {
     this.load.image("balloon", "balloon.png");
     this.load.image("redBalloon", "red_balloon.png");
-    this.load.image("goldBalloon", "gold_balloon.png"); // ✅ NEW
+    this.load.image("goldBalloon", "gold_balloon.png");
   }
 
   async create() {
@@ -234,7 +237,7 @@ class PlayGame extends Phaser.Scene {
   preload() {
     this.load.image("balloon", "balloon.png");
     this.load.image("redBalloon", "red_balloon.png");
-    this.load.image("goldBalloon", "gold_balloon.png"); // ✅ NEW
+    this.load.image("goldBalloon", "gold_balloon.png");
   }
 
   create() {
@@ -345,7 +348,7 @@ class PlayGame extends Phaser.Scene {
     let goldPercent = getGoldPercentBySpeed(balloonSpeed);
     const redPercent = RED_PERCENT;
 
-    // ✅ Gold disabled during cooldown (cooldown starts ONLY when gold is clicked)
+    // Gold disabled during cooldown (cooldown starts ONLY when gold is clicked)
     if (goldBlueCooldown > 0) goldPercent = 0;
 
     let bluePercent = 100 - redPercent - goldPercent;
@@ -366,7 +369,7 @@ class PlayGame extends Phaser.Scene {
     const type = this.pickBalloonType();
     const balloon = this.balloons.create(x, 0, type);
 
-    const vy = (type === "goldBalloon") ? 900 : balloonSpeed;
+    const vy = (type === "goldBalloon") ? GOLD_SPEED : balloonSpeed;
 
     balloon.setVelocityY(vy)
       .setDisplaySize(80, 120)
@@ -377,7 +380,7 @@ class PlayGame extends Phaser.Scene {
     if (type === "balloon") {
       this.attachWordTextToBalloon(balloon);
 
-      // ✅ Decrement cooldown ONLY when a BLUE balloon spawns
+      // Decrement cooldown ONLY when a BLUE balloon spawns
       if (goldBlueCooldown > 0) goldBlueCooldown--;
     }
   }
@@ -385,7 +388,7 @@ class PlayGame extends Phaser.Scene {
   handleBalloonClick(balloon) {
     if (gameOverFlag || this.isPaused) return;
 
-    const type = balloon.texture.key; // ✅ this is texture name, not keyboard
+    const type = balloon.texture.key; // texture name
 
     // RED: click => game over
     if (type === "redBalloon") {
@@ -395,9 +398,9 @@ class PlayGame extends Phaser.Scene {
 
     // GOLD: click => reduce speed + start cooldown
     if (type === "goldBalloon") {
-      balloonSpeed = Math.max(BASE_SPEED, balloonSpeed - 80);
+      balloonSpeed = Math.max(BASE_SPEED, balloonSpeed - GOLD_SLOW_AMOUNT);
 
-      // ✅ cooldown starts ONLY when gold is successfully clicked
+      // cooldown starts ONLY when gold is successfully clicked
       goldBlueCooldown = GOLD_BLUE_COOLDOWN_COUNT;
 
       this.destroyBalloonTexts(balloon);
@@ -412,7 +415,8 @@ class PlayGame extends Phaser.Scene {
     this.destroyBalloonTexts(balloon);
     balloon.destroy();
 
-    if (++poppedBalloons % 5000 === 0) {
+    // balance reward (you said 500 is ok)
+    if (++poppedBalloons % 500 === 0) {
       balance += 10;
       this.balanceText.setText(`Balance: ${balance}`);
     }
@@ -439,13 +443,13 @@ class PlayGame extends Phaser.Scene {
         balloon.wordTextBottom.y = balloon.y + 6;
       }
 
-      // ✅ Game over ONLY if a BLUE balloon reaches bottom
+      // Game over ONLY if a BLUE balloon reaches bottom
       if (balloon.y > this.cameras.main.height && balloon.texture.key === "balloon") {
         this.gameOver();
         return;
       }
 
-      // ✅ Cleanup offscreen GOLD/RED (no effect if missed)
+      // Cleanup offscreen GOLD/RED (no effect if missed)
       if (balloon.y > this.cameras.main.height + 150 &&
           (balloon.texture.key === "goldBalloon" || balloon.texture.key === "redBalloon")) {
         this.destroyBalloonTexts(balloon);
