@@ -10,7 +10,7 @@ let balloonSpeed = BASE_SPEED;
 
 // Gold behavior
 const GOLD_SPEED = 500;        // ✅ changed from 900 to 500
-const GOLD_SLOW_AMOUNT = 80;   // click reward
+const GOLD_SLOW_AMOUNT = 45;   // click reward
 let goldBlueCooldown = 0;
 const GOLD_BLUE_COOLDOWN_COUNT = 8;
 
