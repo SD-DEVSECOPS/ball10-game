@@ -251,6 +251,19 @@ class PlayGame extends Phaser.Scene {
     this.scoreText = this.add.text(10, 10, `Score: ${score}`, { fontSize: "20px", fill: "#fff" });
     this.balanceText = this.add.text(10, 36, `Balance: ${balance}`, { fontSize: "18px", fill: "#fff" });
 
+    // ✅ NEW: Speed text (top-right, 12px)
+    this.speedText = this.add.text(
+      this.cameras.main.width - 10,
+      10,
+      `Speed: ${balloonSpeed}`,
+      { fontSize: "12px", fill: "#fff" }
+    ).setOrigin(1, 0);
+
+    // keep speed pinned to right on resize
+    this.scale.on("resize", () => {
+      if (this.speedText) this.speedText.setX(this.cameras.main.width - 10);
+    });
+
     gameOverFlag = false;
 
     this.time.addEvent({
@@ -409,6 +422,9 @@ class PlayGame extends Phaser.Scene {
       // cooldown starts ONLY when gold is successfully clicked
       goldBlueCooldown = GOLD_BLUE_COOLDOWN_COUNT;
 
+      // ✅ update speed display
+      if (this.speedText) this.speedText.setText(`Speed: ${balloonSpeed}`);
+
       this.destroyBalloonTexts(balloon);
       balloon.destroy();
       return;
@@ -430,6 +446,9 @@ class PlayGame extends Phaser.Scene {
     // +35 every 10 points
     if (score % 10 === 0) {
       balloonSpeed += 35;
+
+      // ✅ update speed display
+      if (this.speedText) this.speedText.setText(`Speed: ${balloonSpeed}`);
     }
   }
 
