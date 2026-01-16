@@ -59,7 +59,6 @@
     return request("/api/leaderboard", { method: "GET" });
   }
 
-  // ✅ NEW
   async function knowledgeLeaderboard() {
     return request("/api/knowledge_leaderboard", { method: "GET" });
   }
