@@ -63,10 +63,7 @@
     return request("/api/knowledge_leaderboard", { method: "GET" });
   }
 
-  // ✅ category/limit optional (backward compatible)
-  // words() -> /api/words
-  // words("connectors") -> /api/words?category=connectors
-  // words("connectors", 2000) -> /api/words?category=connectors&limit=2000
+  // ✅ category + limit are optional (backward compatible)
   async function words(category, limit) {
     const qs = new URLSearchParams();
     if (category) qs.set("category", String(category));
