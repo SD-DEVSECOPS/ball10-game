@@ -10,8 +10,8 @@
       this.kBest = 0;
       this.lives = 3;
 
-      this.baseSpeed = 250;
-      this.maxSpeed = 400;
+      this.baseSpeed = 100;
+      this.maxSpeed = 300;
       this.fallSpeed = this.baseSpeed;
 
       this.wordY = 60;
