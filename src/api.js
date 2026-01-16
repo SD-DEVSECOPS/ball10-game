@@ -63,8 +63,16 @@
     return request("/api/knowledge_leaderboard", { method: "GET" });
   }
 
-  async function words() {
-    return request("/api/words", { method: "GET" });
+  // ✅ category/limit optional (backward compatible)
+  // words() -> /api/words
+  // words("connectors") -> /api/words?category=connectors
+  // words("connectors", 2000) -> /api/words?category=connectors&limit=2000
+  async function words(category, limit) {
+    const qs = new URLSearchParams();
+    if (category) qs.set("category", String(category));
+    if (typeof limit !== "undefined" && limit !== null) qs.set("limit", String(limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request(`/api/words${suffix}`, { method: "GET" });
   }
 
   window.Ball10API = {
