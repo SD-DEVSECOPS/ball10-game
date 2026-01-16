@@ -48,7 +48,6 @@
     });
   }
 
-  // ✅ NEW: save personal Knowledge Run best score
   async function saveKnowledge(token, score) {
     return request("/api/save_knowledge", {
       method: "POST",
@@ -60,9 +59,23 @@
     return request("/api/leaderboard", { method: "GET" });
   }
 
+  // ✅ NEW
+  async function knowledgeLeaderboard() {
+    return request("/api/knowledge_leaderboard", { method: "GET" });
+  }
+
   async function words() {
     return request("/api/words", { method: "GET" });
   }
 
-  window.Ball10API = { register, login, me, save, saveKnowledge, leaderboard, words };
+  window.Ball10API = {
+    register,
+    login,
+    me,
+    save,
+    saveKnowledge,
+    leaderboard,
+    knowledgeLeaderboard,
+    words
+  };
 })();
