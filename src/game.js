@@ -1,6 +1,7 @@
 let score = 0;
 let highScore = 0;
 let balance = 0;
+let knowledgeScore = 0; // ✅ NEW: personal best for Knowledge Run
 let poppedBalloons = 0;
 let gameOverFlag = false;
 
@@ -72,6 +73,7 @@ async function initUserStateFromDbIfLoggedIn() {
       isGuest = false;
       highScore = Number(user.highscore || 0);
       balance = Number(user.balance || 0);
+      knowledgeScore = Number(user.knowledge_score || 0); // ✅ NEW
       return;
     }
   } catch (_) {}
@@ -80,6 +82,7 @@ async function initUserStateFromDbIfLoggedIn() {
   isGuest = true;
   highScore = 0;
   balance = 100;
+  knowledgeScore = 0; // ✅ NEW
 }
 
 async function saveToDb() {
@@ -151,6 +154,7 @@ class Auth extends Phaser.Scene {
         isGuest = true;
         highScore = 0;
         balance = 100;
+        knowledgeScore = 0;
 
         await loadWordsOnce();
         this.scene.start("MainMenu");
@@ -180,21 +184,40 @@ class MainMenu extends Phaser.Scene {
     const user = window.Ball10Auth.getUser();
     const uname = user?.username || "Guest";
 
+    // If user object contains knowledge_score (login response), keep local in sync
+    if (user && typeof user.knowledge_score !== "undefined") {
+      knowledgeScore = Number(user.knowledge_score || 0);
+    }
+
     await loadWordsOnce();
 
     this.add.text(cx, cy - 160, "Main Menu", { fontSize: "30px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(cx, cy - 130, `User: ${uname}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
 
-    this.add.text(cx, cy - 95, "Start", { fontSize: "22px", fill: "#0f0" })
+    // Endless start
+    this.add.text(cx, cy - 95, "Endless Run", { fontSize: "22px", fill: "#0f0" })
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", () => this.startGame());
 
-    this.add.text(cx, cy - 40, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
-    this.add.text(cx, cy - 15, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
+    // Knowledge Run start (requires kmode.js loaded; button shown regardless but guarded)
+    this.add.text(cx, cy - 60, "Knowledge Run", { fontSize: "20px", fill: "#0ff" })
+      .setOrigin(0.5)
+      .setInteractive()
+      .on("pointerdown", () => {
+        if (window.Ball10KnowledgeMode) {
+          this.scene.start("KnowledgeMode");
+        } else {
+          window.Ball10Auth.showAlert("Knowledge mode not loaded (missing kmode.js).", true);
+        }
+      });
+
+    this.add.text(cx, cy - 20, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(cx, cy + 5, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(cx, cy + 30, `Knowledge Score: ${knowledgeScore}`, { fontSize: "14px", fill: "#ddd" }).setOrigin(0.5);
 
     if (user) {
-      this.add.text(cx, cy + 25, "Logout", { fontSize: "18px", fill: "#ff0" })
+      this.add.text(cx, cy + 65, "Logout", { fontSize: "18px", fill: "#ff0" })
         .setOrigin(0.5)
         .setInteractive()
         .on("pointerdown", () => {
@@ -202,13 +225,13 @@ class MainMenu extends Phaser.Scene {
           this.scene.start("Auth");
         });
     } else {
-      this.add.text(cx, cy + 25, "Login / Register", { fontSize: "18px", fill: "#0ff" })
+      this.add.text(cx, cy + 65, "Login / Register", { fontSize: "18px", fill: "#0ff" })
         .setOrigin(0.5)
         .setInteractive()
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
-    this.lbText = this.add.text(cx, cy + 120, "Leaderboard: loading...", {
+    this.lbText = this.add.text(cx, cy + 160, "Endless Leaderboard: loading...", {
       fontSize: "14px", fill: "#ddd", align: "center"
     }).setOrigin(0.5);
 
@@ -216,13 +239,13 @@ class MainMenu extends Phaser.Scene {
       const data = await window.Ball10API.leaderboard();
       const list = data.leaderboard || [];
       if (!list.length) {
-        this.lbText.setText("Leaderboard:\n(no scores yet)");
+        this.lbText.setText("Endless Leaderboard:\n(no scores yet)");
       } else {
         const lines = list.map((r, i) => `${i + 1}. ${r.username} — ${r.highscore}`);
-        this.lbText.setText("Leaderboard:\n" + lines.join("\n"));
+        this.lbText.setText("Endless Leaderboard:\n" + lines.join("\n"));
       }
     } catch {
-      this.lbText.setText("Leaderboard:\n(unavailable)");
+      this.lbText.setText("Endless Leaderboard:\n(unavailable)");
     }
   }
 
@@ -251,7 +274,7 @@ class PlayGame extends Phaser.Scene {
     this.scoreText = this.add.text(10, 10, `Score: ${score}`, { fontSize: "20px", fill: "#fff" });
     this.balanceText = this.add.text(10, 36, `Balance: ${balance}`, { fontSize: "18px", fill: "#fff" });
 
-    // ✅ NEW: Speed text (top-right, 12px)
+    // ✅ Speed text (top-right, 12px)
     this.speedText = this.add.text(
       this.cameras.main.width - 10,
       10,
@@ -259,7 +282,6 @@ class PlayGame extends Phaser.Scene {
       { fontSize: "12px", fill: "#fff" }
     ).setOrigin(1, 0);
 
-    // keep speed pinned to right on resize
     this.scale.on("resize", () => {
       if (this.speedText) this.speedText.setX(this.cameras.main.width - 10);
     });
@@ -544,12 +566,16 @@ class PlayGame extends Phaser.Scene {
   }
 }
 
+// ✅ Build scenes safely (so game doesn't crash if kmode.js isn't loaded yet)
+const scenes = [Auth, MainMenu, PlayGame];
+if (window.Ball10KnowledgeMode) scenes.push(window.Ball10KnowledgeMode);
+
 const config = {
   type: Phaser.AUTO,
   width: window.innerWidth,
   height: window.innerHeight,
   backgroundColor: "#222",
-  scene: [Auth, MainMenu, PlayGame],
+  scene: scenes,
   physics: { default: "arcade", arcade: { debug: false } }
 };
 
