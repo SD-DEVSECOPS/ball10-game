@@ -212,7 +212,7 @@ class MainMenu extends Phaser.Scene {
         }
       });
 
-    this.add.text(cx, cy - 20, `High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
+    this.add.text(cx, cy - 20, `Endless High Score: ${highScore}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(cx, cy + 5, `Balance: ${balance}`, { fontSize: "16px", fill: "#fff" }).setOrigin(0.5);
     this.add.text(cx, cy + 30, `Knowledge Score: ${knowledgeScore}`, { fontSize: "14px", fill: "#ddd" }).setOrigin(0.5);
 
