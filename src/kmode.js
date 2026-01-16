@@ -1,7 +1,15 @@
-// src/kmode.js
-// Knowledge Run mode (no leaderboard, personal best saved to DB as knowledge_score)
 
 (function () {
+  const CATEGORIES = [
+    { key: "general_b2", label: "General B2" },
+    { key: "connectors", label: "Connectors" },
+    { key: "academic_c1", label: "Academic C1" },
+    { key: "medical", label: "Medical" },
+    { key: "cybersecurity", label: "Cybersecurity" },
+  ];
+
+  function norm(s) { return String(s || "").trim(); }
+
   class KnowledgeMode extends Phaser.Scene {
     constructor() {
       super({ key: "KnowledgeMode" });
@@ -28,17 +36,134 @@
       this.bestText = null;
 
       this.optionPositions = [];
+
+      // ✅ Category related
+      this.selectedCategory = null;
+      this.pairs = [];          // words for selected category only
+      this.categoryUI = [];     // UI objects for category picker
     }
 
     async create() {
-      await this.ensureWords();
       await this.loadBestFromDb();
+      this.showCategoryPicker();
+    }
+
+    // ---------------- Category Picker ----------------
+    destroyCategoryUI() {
+      this.categoryUI.forEach(o => { try { o.destroy(); } catch {} });
+      this.categoryUI = [];
+    }
+
+    showCategoryPicker() {
+      // stop run if we came from a run
+      this.active = false;
+
+      // cleanup any existing run UI/objects
+      this.optionTexts.forEach(t => t.destroy());
+      this.optionTexts = [];
+      if (this.wordText) { this.wordText.destroy(); this.wordText = null; }
+      this.currentPair = null;
+
+      // cleanup category UI and rebuild
+      this.destroyCategoryUI();
 
       const w = this.cameras.main.width;
+      const h = this.cameras.main.height;
+      const cx = w / 2;
+      const cy = h / 2;
 
+      const title = this.add.text(cx, cy - 210, "Knowledge Run", { fontSize: "34px", fill: "#fff" }).setOrigin(0.5);
+      const sub = this.add.text(cx, cy - 170, "Select a category:", { fontSize: "16px", fill: "#ddd" }).setOrigin(0.5);
+      const best = this.add.text(cx, cy - 140, `Best: ${this.kBest}`, { fontSize: "14px", fill: "#bbb" }).setOrigin(0.5);
+
+      this.categoryUI.push(title, sub, best);
+
+      const startY = cy - 85;
+      const gap = 46;
+
+      CATEGORIES.forEach((c, idx) => {
+        const btn = this.add.text(cx, startY + idx * gap, c.label, {
+          fontSize: "22px",
+          fill: "#0ff",
+          backgroundColor: "rgba(0,0,0,0.35)",
+          padding: { left: 12, right: 12, top: 8, bottom: 8 },
+        })
+          .setOrigin(0.5)
+          .setInteractive({ useHandCursor: true })
+          .on("pointerdown", () => this.startCategory(c.key));
+
+        this.categoryUI.push(btn);
+      });
+
+      const back = this.add.text(cx, cy + 210, "Main Menu", { fontSize: "20px", fill: "#ff0" })
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on("pointerdown", () => this.scene.start("MainMenu"));
+
+      this.categoryUI.push(back);
+    }
+
+    async startCategory(categoryKey) {
+      this.selectedCategory = categoryKey;
+
+      // Reset run stats (same as your original create())
       this.kScore = 0;
       this.lives = 3;
       this.fallSpeed = this.baseSpeed;
+
+      // Load only selected category words
+      await this.loadCategoryWords(categoryKey);
+
+      if (!this.pairs.length) {
+        // show simple message + back to categories
+        this.destroyCategoryUI();
+
+        const cx = this.cameras.main.width / 2;
+        const cy = this.cameras.main.height / 2;
+
+        const msg = this.add.text(cx, cy - 20, "No words available for this category.", {
+          fontSize: "18px", fill: "#fff"
+        }).setOrigin(0.5);
+
+        const back = this.add.text(cx, cy + 40, "Back", {
+          fontSize: "20px", fill: "#ff0"
+        })
+          .setOrigin(0.5)
+          .setInteractive({ useHandCursor: true })
+          .on("pointerdown", () => this.showCategoryPicker());
+
+        this.categoryUI.push(msg, back);
+        return;
+      }
+
+      // Hide category picker UI and start run UI
+      this.destroyCategoryUI();
+      this.startRunUI();
+      this.active = true;
+      this.spawnNewWord();
+    }
+
+    async loadCategoryWords(categoryKey) {
+      this.pairs = [];
+      try {
+        // uses your worker.js: /api/words?category=...
+        const data = await window.Ball10API.words(categoryKey, 5000);
+        const list = data?.words || [];
+        this.pairs = list
+          .map(w => ({
+            de: norm(w.de),
+            en: norm(w.en),
+            category: norm(w.category),
+          }))
+          .filter(w => w.de && w.en);
+      } catch {
+        this.pairs = [];
+      }
+    }
+
+    // ---------------- Original logic below (only switched source from window.wordPairs -> this.pairs) ----------------
+    startRunUI() {
+      const w = this.cameras.main.width;
 
       // UI top-left
       this.scoreText = this.add.text(10, 10, `K-Score: ${this.kScore}`, { fontSize: "20px", fill: "#fff" });
@@ -54,11 +179,11 @@
         fill: "#ddd"
       }).setOrigin(0.5, 0.5);
 
-      // Back button
-      this.add.text(w - 10, 34, "Back", { fontSize: "14px", fill: "#ff0" })
+      // Back button (category-related: go back to category picker)
+      this.add.text(w - 10, 34, "Categories", { fontSize: "14px", fill: "#ff0" })
         .setOrigin(1, 0)
         .setInteractive({ useHandCursor: true })
-        .on("pointerdown", () => this.scene.start("MainMenu"));
+        .on("pointerdown", () => this.showCategoryPicker());
 
       // Keep right-side UI pinned on resize
       this.scale.on("resize", () => {
@@ -68,31 +193,6 @@
 
       // Options positions
       this.renderOptionsArea();
-
-      // Start
-      this.active = true;
-      this.spawnNewWord();
-    }
-
-    async ensureWords() {
-      // Try to reuse existing global wordPairs (from game.js) if present
-      try {
-        if (Array.isArray(window.wordPairs) && window.wordPairs.length > 0) return;
-      } catch {}
-
-      // Otherwise fetch words
-      try {
-        const data = await window.Ball10API.words();
-        const list = data?.words || [];
-        window.wordPairs = list
-          .map(w => ({
-            de: String(w.de || "").trim(),
-            en: String(w.en || "").trim(),
-          }))
-          .filter(w => w.de && w.en);
-      } catch {
-        window.wordPairs = [];
-      }
     }
 
     async loadBestFromDb() {
@@ -120,13 +220,13 @@
     }
 
     pickRandomPair() {
-      const pairs = window.wordPairs || [];
+      const pairs = this.pairs || [];
       if (!pairs.length) return null;
       return pairs[Math.floor(Math.random() * pairs.length)];
     }
 
     pickWrongOptions(correctEn, count) {
-      const pairs = window.wordPairs || [];
+      const pairs = this.pairs || [];
       const wrong = [];
       if (!pairs.length) return wrong;
 
@@ -151,14 +251,11 @@
     }
 
     updateDifficulty() {
-      // ✅ speed stays in 100..300 range
-      // +5 speed every 10 correct answers (gentle)
       const inc = Math.floor(this.kScore / 10) * 5;
       this.fallSpeed = Math.min(this.maxSpeed, this.baseSpeed + inc);
     }
 
     maybeRestoreLife() {
-      // +1 life every 25 correct, cap 3
       if (this.kScore > 0 && this.kScore % 25 === 0) {
         this.lives = Math.min(3, this.lives + 1);
         if (this.livesText) this.livesText.setText(`Lives: ${this.lives}/3`);
@@ -229,7 +326,6 @@
         const label = String(options[i] || "").trim();
         const pos = this.optionPositions[i];
 
-        // 18px baseline; shrink if long to keep single line
         const size = label.length > 14 ? 14 : 18;
 
         const t = this.add.text(pos.x, pos.y, label, {
@@ -247,7 +343,6 @@
       }
     }
 
-    // Flash helper (green/red)
     flashOption(textObj, bg) {
       if (!textObj) return;
       textObj.setStyle({ backgroundColor: bg });
@@ -265,7 +360,6 @@
       const clicked = this.optionTexts.find(t => t && t.text === chosen);
 
       if (isCorrect) {
-        // ✅ Green feedback
         this.flashOption(clicked, "rgba(20,201,147,0.65)");
 
         this.kScore += 1;
@@ -273,7 +367,6 @@
 
         this.maybeRestoreLife();
 
-        // Next word after a tiny delay so player sees green
         this.time.delayedCall(160, () => {
           if (!this.active) return;
           if (this.wordText) {
@@ -287,13 +380,11 @@
         return;
       }
 
-      // ❌ Wrong: Red feedback + lose life
       this.flashOption(clicked, "rgba(255,71,87,0.70)");
 
       this.lives -= 1;
       if (this.livesText) this.livesText.setText(`Lives: ${this.lives}/3`);
 
-      // Disable + gray out wrong option
       if (clicked) {
         clicked.disableInteractive();
         clicked.setAlpha(0.45);
@@ -308,15 +399,12 @@
       if (!this.active) return;
       this.active = false;
 
-      // Update best
       this.kBest = Math.max(this.kBest, this.kScore);
       await this.saveBestToDbIfNeeded();
 
-      // Clean options
       this.optionTexts.forEach(t => t.destroy());
       this.optionTexts = [];
 
-      // Clean word
       if (this.wordText) {
         this.wordText.destroy();
         this.wordText = null;
@@ -347,12 +435,10 @@
       if (!this.active) return;
       if (!this.wordText) return;
 
-      // Move word down based on fallSpeed (px/sec)
       const dy = (this.fallSpeed * (delta / 1000));
       this.wordY += dy;
       this.wordText.y = this.wordY;
 
-      // If reaches bottom => -1 life and next word (or game over)
       const bottom = this.cameras.main.height - 80;
       if (this.wordY >= bottom) {
         this.lives -= 1;
@@ -363,12 +449,10 @@
           return;
         }
 
-        // Next word
         this.spawnNewWord();
       }
     }
   }
 
-  // expose globally so game.js can include scene safely
   window.Ball10KnowledgeMode = KnowledgeMode;
 })();
