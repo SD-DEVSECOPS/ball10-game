@@ -10,6 +10,7 @@
       this.kBest = 0;
       this.lives = 3;
 
+      // ✅ Speed should be readable
       this.baseSpeed = 100;
       this.maxSpeed = 300;
       this.fallSpeed = this.baseSpeed;
@@ -25,27 +26,25 @@
       this.livesText = null;
       this.scoreText = null;
       this.bestText = null;
+
+      this.optionPositions = [];
     }
 
     async create() {
-      // Ensure words are loaded (uses same global wordPairs loaded by game.js if present,
-      // but we don't assume it exists; we fetch again if needed).
       await this.ensureWords();
-
-      // Load best score from DB (if logged in)
       await this.loadBestFromDb();
 
       const w = this.cameras.main.width;
-      const h = this.cameras.main.height;
 
       this.kScore = 0;
       this.lives = 3;
       this.fallSpeed = this.baseSpeed;
 
-      // UI top
+      // UI top-left
       this.scoreText = this.add.text(10, 10, `K-Score: ${this.kScore}`, { fontSize: "20px", fill: "#fff" });
       this.livesText = this.add.text(10, 36, `Lives: ${this.lives}/3`, { fontSize: "18px", fill: "#fff" });
 
+      // UI top-right
       this.bestText = this.add.text(w - 10, 10, `Best: ${this.kBest}`, { fontSize: "12px", fill: "#fff" })
         .setOrigin(1, 0);
 
@@ -55,7 +54,7 @@
         fill: "#ddd"
       }).setOrigin(0.5, 0.5);
 
-      // Back button (top-right under best)
+      // Back button
       this.add.text(w - 10, 34, "Back", { fontSize: "14px", fill: "#ff0" })
         .setOrigin(1, 0)
         .setInteractive({ useHandCursor: true })
@@ -67,22 +66,21 @@
         if (this.bestText) this.bestText.setX(nw - 10);
       });
 
-      // Options area (center)
+      // Options positions
       this.renderOptionsArea();
 
-      // Start first word
+      // Start
       this.active = true;
       this.spawnNewWord();
     }
 
     async ensureWords() {
-      // Try to reuse global cache from game.js if it exists (wordPairs)
-      // but don't require it.
+      // Try to reuse existing global wordPairs (from game.js) if present
       try {
         if (Array.isArray(window.wordPairs) && window.wordPairs.length > 0) return;
       } catch {}
 
-      // Otherwise fetch from API
+      // Otherwise fetch words
       try {
         const data = await window.Ball10API.words();
         const list = data?.words || [];
@@ -99,9 +97,8 @@
 
     async loadBestFromDb() {
       this.kBest = 0;
-
       const token = window.Ball10Auth.getToken();
-      if (!token) return; // guest
+      if (!token) return;
 
       try {
         const me = await window.Ball10API.me(token);
@@ -113,16 +110,15 @@
 
     async saveBestToDbIfNeeded() {
       const token = window.Ball10Auth.getToken();
-      if (!token) return; // guest
+      if (!token) return;
 
       try {
         await window.Ball10API.saveKnowledge(token, this.kBest);
-      } catch (e) {
-        // silent; don't crash mode
+      } catch {
+        // silent: do not break gameplay
       }
     }
 
-    // ---- Round logic ----
     pickRandomPair() {
       const pairs = window.wordPairs || [];
       if (!pairs.length) return null;
@@ -155,13 +151,14 @@
     }
 
     updateDifficulty() {
-      // speed stays in 250..400 range
-      // increase gently every 10 points (+10), capped
-      const inc = Math.floor(this.kScore / 10) * 10;
+      // ✅ speed stays in 100..300 range
+      // +5 speed every 10 correct answers (gentle)
+      const inc = Math.floor(this.kScore / 10) * 5;
       this.fallSpeed = Math.min(this.maxSpeed, this.baseSpeed + inc);
     }
 
     maybeRestoreLife() {
+      // +1 life every 25 correct, cap 3
       if (this.kScore > 0 && this.kScore % 25 === 0) {
         this.lives = Math.min(3, this.lives + 1);
         if (this.livesText) this.livesText.setText(`Lives: ${this.lives}/3`);
@@ -169,13 +166,10 @@
     }
 
     renderOptionsArea() {
-      // Clear old options if any
+      // Clear old options
       this.optionTexts.forEach(t => t.destroy());
       this.optionTexts = [];
 
-      // Static layout positions (centered)
-      // 4 options in a 2x2 grid around center
-      // This is mobile-friendly.
       this.optionPositions = [];
 
       const w = this.cameras.main.width;
@@ -187,6 +181,7 @@
       const dx = Math.min(180, w * 0.22);
       const dy = 55;
 
+      // 2x2 grid (4 options)
       this.optionPositions.push({ x: cx - dx, y: cy - dy });
       this.optionPositions.push({ x: cx + dx, y: cy - dy });
       this.optionPositions.push({ x: cx - dx, y: cy + dy });
@@ -196,13 +191,13 @@
     spawnNewWord() {
       if (!this.active) return;
 
-      // Clear old word text
+      // Clear old word
       if (this.wordText) {
         this.wordText.destroy();
         this.wordText = null;
       }
 
-      // Recompute option positions (in case of resize/orientation)
+      // Recompute option positions (orientation/resize)
       this.renderOptionsArea();
 
       this.currentPair = this.pickRandomPair();
@@ -213,7 +208,7 @@
 
       this.updateDifficulty();
 
-      // Create falling German word text near top
+      // Falling German word
       this.wordX = this.cameras.main.width / 2;
       this.wordY = 110;
 
@@ -225,19 +220,16 @@
         strokeThickness: 3,
       }).setOrigin(0.5, 0.5);
 
-      // Build 4 options: 1 correct + 3 wrong
+      // Options: 1 correct + 3 wrong
       const correct = this.currentPair.en;
       const wrongs = this.pickWrongOptions(correct, 3);
-
-      // If not enough wrongs, still proceed (but game will be too easy)
       const options = this.shuffle([correct, ...wrongs]);
 
-      // Render clickable options in center, 18px baseline,
-      // shrink if long (single line only)
       for (let i = 0; i < 4; i++) {
         const label = String(options[i] || "").trim();
         const pos = this.optionPositions[i];
 
+        // 18px baseline; shrink if long to keep single line
         const size = label.length > 14 ? 14 : 18;
 
         const t = this.add.text(pos.x, pos.y, label, {
@@ -255,41 +247,60 @@
       }
     }
 
+    // Flash helper (green/red)
+    flashOption(textObj, bg) {
+      if (!textObj) return;
+      textObj.setStyle({ backgroundColor: bg });
+
+      this.time.delayedCall(180, () => {
+        if (!textObj || !textObj.active) return;
+        textObj.setStyle({ backgroundColor: "rgba(0,0,0,0.35)" });
+      });
+    }
+
     onOptionClick(chosen) {
       if (!this.active || !this.currentPair) return;
 
-      // Correct
-      if (chosen === this.currentPair.en) {
+      const isCorrect = (chosen === this.currentPair.en);
+      const clicked = this.optionTexts.find(t => t && t.text === chosen);
+
+      if (isCorrect) {
+        // ✅ Green feedback
+        this.flashOption(clicked, "rgba(20,201,147,0.65)");
+
         this.kScore += 1;
         if (this.scoreText) this.scoreText.setText(`K-Score: ${this.kScore}`);
 
         this.maybeRestoreLife();
 
-        // pop / next
-        if (this.wordText) {
-          this.wordText.destroy();
-          this.wordText = null;
-        }
-        this.currentPair = null;
+        // Next word after a tiny delay so player sees green
+        this.time.delayedCall(160, () => {
+          if (!this.active) return;
+          if (this.wordText) {
+            this.wordText.destroy();
+            this.wordText = null;
+          }
+          this.currentPair = null;
+          this.spawnNewWord();
+        });
 
-        // next word immediately
-        this.spawnNewWord();
         return;
       }
 
-      // Wrong => -1 life
+      // ❌ Wrong: Red feedback + lose life
+      this.flashOption(clicked, "rgba(255,71,87,0.70)");
+
       this.lives -= 1;
       if (this.livesText) this.livesText.setText(`Lives: ${this.lives}/3`);
 
-      // Small feedback: gray out clicked option (optional polish)
-      const t = this.optionTexts.find(x => x.text === chosen);
-      if (t) {
-        t.disableInteractive();
-        t.setAlpha(0.45);
+      // Disable + gray out wrong option
+      if (clicked) {
+        clicked.disableInteractive();
+        clicked.setAlpha(0.45);
       }
 
       if (this.lives <= 0) {
-        this.endGame("Out of lives.");
+        this.time.delayedCall(160, () => this.endGame("Out of lives."));
       }
     }
 
@@ -297,7 +308,7 @@
       if (!this.active) return;
       this.active = false;
 
-      // update best
+      // Update best
       this.kBest = Math.max(this.kBest, this.kScore);
       await this.saveBestToDbIfNeeded();
 
@@ -358,6 +369,6 @@
     }
   }
 
-  // expose globally so game.js can reference it without rewriting
+  // expose globally so game.js can include scene safely
   window.Ball10KnowledgeMode = KnowledgeMode;
 })();
