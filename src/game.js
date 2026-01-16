@@ -231,10 +231,17 @@ class MainMenu extends Phaser.Scene {
         .on("pointerdown", () => this.scene.start("Auth"));
     }
 
+    // ✅ Endless leaderboard
     this.lbText = this.add.text(cx, cy + 160, "Endless Leaderboard: loading...", {
-      fontSize: "14px", fill: "#ddd", align: "center"
+      fontSize: "14px", fill: "#cfc", align: "center"
     }).setOrigin(0.5);
 
+    // ✅ Knowledge leaderboard (separate color)
+    this.kLbText = this.add.text(cx, cy + 265, "Knowledge Leaderboard: loading...", {
+      fontSize: "14px", fill: "#8fd", align: "center"
+    }).setOrigin(0.5);
+
+    // Endless leaderboard load
     try {
       const data = await window.Ball10API.leaderboard();
       const list = data.leaderboard || [];
@@ -246,6 +253,20 @@ class MainMenu extends Phaser.Scene {
       }
     } catch {
       this.lbText.setText("Endless Leaderboard:\n(unavailable)");
+    }
+
+    // Knowledge leaderboard load
+    try {
+      const data = await window.Ball10API.knowledgeLeaderboard();
+      const list = data.leaderboard || [];
+      if (!list.length) {
+        this.kLbText.setText("Knowledge Leaderboard:\n(no scores yet)");
+      } else {
+        const lines = list.map((r, i) => `${i + 1}. ${r.username} — ${r.knowledge_score}`);
+        this.kLbText.setText("Knowledge Leaderboard:\n" + lines.join("\n"));
+      }
+    } catch {
+      this.kLbText.setText("Knowledge Leaderboard:\n(unavailable)");
     }
   }
 
