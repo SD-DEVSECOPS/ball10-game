@@ -109,6 +109,25 @@ class Auth extends Phaser.Scene {
       fontSize: "16px", fill: "#ddd", align: "center"
     }).setOrigin(0.5);
 
+    // ✅ AUTO-RESTORE: if token is valid, skip Auth screen after refresh
+    (async () => {
+      const token = window.Ball10Auth.getToken();
+      if (!token) return; // no token => show login/register as normal
+
+      this.status.setText("Restoring session...");
+      try {
+        const user = await window.Ball10Auth.restoreFromDb();
+        if (user) {
+          await initUserStateFromDbIfLoggedIn();
+          this.scene.start("MainMenu");
+        } else {
+          this.status.setText("Session expired. Please login.");
+        }
+      } catch (e) {
+        this.status.setText("Session check failed. Please login.");
+      }
+    })();
+
     // LOGIN button
     this.add.text(cx, cy - 40, "Login", { fontSize: "26px", fill: "#0f0" })
       .setOrigin(0.5)
@@ -236,7 +255,7 @@ class MainMenu extends Phaser.Scene {
       fontSize: "14px", fill: "#cfc", align: "center"
     }).setOrigin(0.5);
 
-    // ✅ Knowledge leaderboard (separate color)
+    // ✅ Knowledge leaderboard
     this.kLbText = this.add.text(cx, cy + 265, "Knowledge Leaderboard: loading...", {
       fontSize: "14px", fill: "#8fd", align: "center"
     }).setOrigin(0.5);
