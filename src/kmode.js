@@ -6,7 +6,7 @@
     { key: "academic_c1", label: "Academic C1" },
     { key: "medical", label: "Medical" },
     { key: "cybersecurity", label: "Cybersecurity" },
-    { key: "softwareng", label: "Software Eng" },
+    { key: "softwareng", label: "Software Engineering" },
   ];
 
   function norm(s) { return String(s || "").trim(); }
