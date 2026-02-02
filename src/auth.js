@@ -120,8 +120,9 @@
         cursor:pointer; font-weight:bold;
       }
       .ball10-btn.primary{ background:#14C993; border-color:#14C993; color:#06150f; }
-      .ball10-btn.danger{ background:#FF4757; border-color:#FF4757; }
+      .ball10-btn.primary{ background:#14C993; border-color:#14C993; color:#06150f; }
       .ball10-small{ font-size:12px; color:#bbb; }
+      .ball10-error-inline{ color: #FF4757; font-size: 13px; margin-top: 8px; font-weight: bold; background: rgba(255,71,87,0.1); padding: 8px; border-radius: 6px; display: none; }
       .ball10-checkbox{ display:flex; gap:8px; align-items:center; user-select:none; cursor:pointer; }
       .ball10-checkbox input{ width:auto; }
     `;
@@ -181,6 +182,9 @@
             switchBtn.style.textDecoration = "underline";
             switchBtn.style.color = "#14C993";
 
+            const errArea = document.createElement("div");
+            errArea.className = "ball10-error-inline";
+
             row.appendChild(rememberWrap);
             row.appendChild(switchBtn);
 
@@ -201,6 +205,7 @@
             box.appendChild(uField);
             box.appendChild(pField);
             box.appendChild(row);
+            box.appendChild(errArea);
             box.appendChild(actions);
             backdrop.appendChild(box);
             document.body.appendChild(backdrop);
@@ -220,12 +225,14 @@
             }
 
             async function submit() {
+                errArea.style.display = "none";
                 const username = String(uInput.value || "").trim();
                 const password = String(pInput.value || "");
                 const rememberMe = !!remember.checked;
 
                 if (!username || !password) {
-                    showAlert("Username and password are required.", true);
+                    errArea.textContent = "Username and password are required.";
+                    errArea.style.display = "block";
                     return;
                 }
 
@@ -249,12 +256,14 @@
                         okBtn.disabled = false;
                         okBtn.style.opacity = "1";
                         pInput.value = ""; // clear password for login after register
+                        errArea.style.display = "none";
                         return; // Stay in modal to allow login
                     }
                     cleanup();
                     resolve(result);
                 } catch (e) {
-                    showAlert(e.message || "Action failed", true);
+                    errArea.textContent = e.message || "Action failed";
+                    errArea.style.display = "block";
                     okBtn.disabled = false;
                     okBtn.style.opacity = "1";
                     okBtn.textContent = mode === "register" ? "Register" : "Login";
