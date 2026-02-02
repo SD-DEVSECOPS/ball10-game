@@ -100,6 +100,8 @@ class Auth extends Phaser.Scene {
   constructor() { super({ key: "Auth" }); }
 
   create() {
+    this._busyAuth = false; // ✅ prevent double modal/open/restore conflicts
+
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
 
@@ -114,18 +116,24 @@ class Auth extends Phaser.Scene {
       const token = window.Ball10Auth.getToken();
       if (!token) return; // no token => show login/register as normal
 
+      if (this._busyAuth) return;
+      this._busyAuth = true;
+
       this.status.setText("Restoring session...");
       try {
         const user = await window.Ball10Auth.restoreFromDb();
         if (user) {
           await initUserStateFromDbIfLoggedIn();
           this.scene.start("MainMenu");
+          return;
         } else {
           this.status.setText("Session expired. Please login.");
         }
       } catch (e) {
         this.status.setText("Session check failed. Please login.");
       }
+
+      this._busyAuth = false;
     })();
 
     // LOGIN button
@@ -133,16 +141,22 @@ class Auth extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", async () => {
+        if (this._busyAuth) return;
+        this._busyAuth = true;
+
         this.status.setText("Logging in...");
         try {
           await window.Ball10Auth.promptLogin();
           await initUserStateFromDbIfLoggedIn();
           this.scene.start("MainMenu");
+          return;
         } catch (e) {
           const msg = e?.message || String(e);
           this.status.setText(`Login failed: ${msg}`);
           window.Ball10Auth.showAlert(`Login failed: ${msg}`, true);
         }
+
+        this._busyAuth = false;
       });
 
     // REGISTER button
@@ -150,15 +164,22 @@ class Auth extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive()
       .on("pointerdown", async () => {
+        if (this._busyAuth) return;
+        this._busyAuth = true;
+
         this.status.setText("Creating account...");
         try {
           await window.Ball10Auth.promptRegister();
           this.status.setText("Account created. Now login.");
+          this._busyAuth = false;
+          return;
         } catch (e) {
           const msg = e?.message || String(e);
           this.status.setText(`Register failed: ${msg}`);
           window.Ball10Auth.showAlert(`Register failed: ${msg}`, true);
         }
+
+        this._busyAuth = false;
       });
 
     // GUEST PLAY button
@@ -243,6 +264,34 @@ class MainMenu extends Phaser.Scene {
           window.Ball10Auth.logout();
           this.scene.start("Auth");
         });
+
+      // ✅ Change Password (only when logged in)
+      this.add.text(cx, cy + 95, "Change Password", { fontSize: "16px", fill: "#0ff" })
+        .setOrigin(0.5)
+        .setInteractive()
+        .on("pointerdown", async () => {
+          try {
+            await window.Ball10Auth.promptChangePassword();
+
+            // Optional: refresh user info after change (session stays same)
+            const token = window.Ball10Auth.getToken();
+            if (token) {
+              try {
+                const me = await window.Ball10API.me(token);
+                if (me?.user) {
+                  // keep localStorage/cookie user in sync
+                  window.Ball10Auth.setSession(token, me.user, 30);
+                }
+              } catch {}
+            }
+
+            window.Ball10Auth.showAlert("Password updated ✅");
+          } catch (e) {
+            const msg = e?.message || String(e);
+            if (msg !== "Cancelled") window.Ball10Auth.showAlert(`Change failed: ${msg}`, true);
+          }
+        });
+
     } else {
       this.add.text(cx, cy + 65, "Login / Register", { fontSize: "18px", fill: "#0ff" })
         .setOrigin(0.5)
