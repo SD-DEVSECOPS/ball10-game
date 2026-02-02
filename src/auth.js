@@ -130,7 +130,7 @@
         document.head.appendChild(style);
     }
 
-    function openAuthModal(initialMode /* "login"|"register" */) {
+    function openAuthModal(initialMode /* "login"|"register"|"change" */) {
         ensureModalStyles();
 
         return new Promise((resolve, reject) => {
@@ -143,6 +143,8 @@
             box.className = "ball10-modal";
 
             const title = document.createElement("h3");
+
+            // Username field
             const uField = document.createElement("div");
             uField.className = "ball10-field";
             const uLabel = document.createElement("label");
@@ -153,15 +155,25 @@
             uField.appendChild(uLabel);
             uField.appendChild(uInput);
 
+            // Password field (Primary)
             const pField = document.createElement("div");
             pField.className = "ball10-field";
             const pLabel = document.createElement("label");
-            pLabel.textContent = "Password";
             const pInput = document.createElement("input");
             pInput.type = "password";
-            pInput.placeholder = "password";
             pField.appendChild(pLabel);
             pField.appendChild(pInput);
+
+            // New Password field (Change mode only)
+            const p2Field = document.createElement("div");
+            p2Field.className = "ball10-field";
+            const p2Label = document.createElement("label");
+            p2Label.textContent = "New Password";
+            const p2Input = document.createElement("input");
+            p2Input.type = "password";
+            p2Input.placeholder = "new password";
+            p2Field.appendChild(p2Label);
+            p2Field.appendChild(p2Input);
 
             const row = document.createElement("div");
             row.className = "ball10-row";
@@ -205,6 +217,7 @@
             box.appendChild(title);
             box.appendChild(uField);
             box.appendChild(pField);
+            box.appendChild(p2Field);
             box.appendChild(row);
             box.appendChild(errArea);
             box.appendChild(actions);
@@ -212,9 +225,18 @@
             document.body.appendChild(backdrop);
 
             function updateUI() {
-                title.textContent = mode === "register" ? "Create Account" : "Login";
-                okBtn.textContent = mode === "register" ? "Register" : "Login";
+                title.textContent = mode === "register" ? "Create Account" : (mode === "change" ? "Change Password" : "Login");
+                okBtn.textContent = mode === "register" ? "Register" : (mode === "change" ? "Update" : "Login");
                 switchBtn.textContent = mode === "register" ? "Already have account? Login" : "No account? Register";
+
+                uField.style.display = mode === "change" ? "none" : "block";
+                p2Field.style.display = mode === "change" ? "block" : "none";
+                rememberWrap.style.display = mode === "change" ? "none" : "flex";
+                switchBtn.style.display = mode === "change" ? "none" : "block";
+
+                pLabel.textContent = mode === "change" ? "Old Password" : "Password";
+                pInput.placeholder = mode === "change" ? "old password" : "password";
+
                 uInput.autocomplete = mode === "register" ? "username" : "username";
                 pInput.autocomplete = mode === "register" ? "new-password" : "current-password";
             }
@@ -229,10 +251,16 @@
                 errArea.style.display = "none";
                 const username = String(uInput.value || "").trim();
                 const password = String(pInput.value || "");
+                const newPassword = String(p2Input.value || "");
                 const rememberMe = !!remember.checked;
 
-                if (!username || !password) {
+                if (mode !== "change" && (!username || !password)) {
                     errArea.textContent = "Username and password are required.";
+                    errArea.style.display = "block";
+                    return;
+                }
+                if (mode === "change" && (!password || !newPassword)) {
+                    errArea.textContent = "Old and new passwords are required.";
                     errArea.style.display = "block";
                     return;
                 }
@@ -249,7 +277,7 @@
                         setSession(data.token, data.user, rememberMe ? 30 : null);
                         showAlert(`Welcome ${data.user.username} ✅`);
                         result = data.user;
-                    } else {
+                    } else if (mode === "register") {
                         await window.Ball10API.register(username, password);
                         showAlert("Registered ✅ Now login.");
                         mode = "login";
@@ -259,6 +287,11 @@
                         pInput.value = ""; // clear password for login after register
                         errArea.style.display = "none";
                         return; // Stay in modal to allow login
+                    } else if (mode === "change") {
+                        const token = getToken();
+                        await window.Ball10API.changePassword(token, password, newPassword);
+                        showAlert("Password changed successfully ✅");
+                        result = true;
                     }
                     cleanup();
                     resolve(result);
@@ -267,7 +300,7 @@
                     errArea.style.display = "block";
                     okBtn.disabled = false;
                     okBtn.style.opacity = "1";
-                    okBtn.textContent = mode === "register" ? "Register" : "Login";
+                    okBtn.textContent = mode === "register" ? "Register" : (mode === "change" ? "Update" : "Login");
                 }
             }
 
@@ -284,17 +317,16 @@
                 if (e.target === backdrop) { cleanup(); reject(new Error("Cancelled")); }
             };
 
-            // Stop propagation inside box so clicks don't trigger backdrop close
             box.onclick = (e) => e.stopPropagation();
 
-            const inputs = [uInput, pInput];
+            const inputs = [uInput, pInput, p2Input];
             inputs.forEach(inp => {
                 inp.addEventListener("keydown", (e) => {
                     if (e.key === "Enter") submit();
                 });
             });
 
-            setTimeout(() => uInput.focus(), 0);
+            setTimeout(() => (mode === "change" ? pInput : uInput).focus(), 0);
         });
     }
 
@@ -321,6 +353,10 @@
         return await openAuthModal("register");
     }
 
+    async function promptChangePassword() {
+        return await openAuthModal("change");
+    }
+
     window.Ball10Auth = {
         showAlert,
         getToken,
@@ -330,5 +366,6 @@
         restoreFromDb,
         promptLogin,
         promptRegister,
+        promptChangePassword,
     };
 })();
