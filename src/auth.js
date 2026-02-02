@@ -110,6 +110,7 @@
         border:1px solid rgba(255,255,255,.15);
         background:#141414; color:#fff;
         outline:none;
+        font-size: 16px;
       }
       .ball10-row{ display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:10px; }
       .ball10-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
