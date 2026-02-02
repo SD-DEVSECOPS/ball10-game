@@ -1,91 +1,91 @@
 (function () {
-  const LS_TOKEN = "ball10_token";
-  const LS_USER = "ball10_user";
-  const COOKIE_TOKEN = "ball10_token";
-  const COOKIE_USER = "ball10_user";
+    const LS_TOKEN = "ball10_token";
+    const LS_USER = "ball10_user";
+    const COOKIE_TOKEN = "ball10_token";
+    const COOKIE_USER = "ball10_user";
 
-  function showAlert(msg, isError = false) {
-    const el = document.getElementById("appAlert");
-    if (!el) return;
-    el.textContent = msg;
-    el.classList.toggle("error", !!isError);
-    el.style.display = "block";
-    setTimeout(() => { el.style.display = "none"; }, isError ? 4500 : 2500);
-  }
-
-  // ---------------- Cookies (fallback if localStorage is unreliable) ----------------
-  function setCookie(name, value, days /* null => session cookie */) {
-    const enc = encodeURIComponent(String(value || ""));
-    let cookie = `${name}=${enc}; Path=/; SameSite=Lax`;
-    // If you're always on https (recommended), this is fine:
-    if (location.protocol === "https:") cookie += "; Secure";
-    if (typeof days === "number" && days > 0) {
-      cookie += `; Max-Age=${Math.floor(days * 86400)}`;
+    function showAlert(msg, isError = false) {
+        const el = document.getElementById("appAlert");
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.toggle("error", !!isError);
+        el.style.display = "block";
+        setTimeout(() => { el.style.display = "none"; }, isError ? 4500 : 2500);
     }
-    document.cookie = cookie;
-  }
 
-  function getCookie(name) {
-    const m = document.cookie.match(new RegExp("(^|;\\s*)" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=([^;]*)"));
-    return m ? decodeURIComponent(m[2]) : "";
-  }
+    // ---------------- Cookies (fallback if localStorage is unreliable) ----------------
+    function setCookie(name, value, days /* null => session cookie */) {
+        const enc = encodeURIComponent(String(value || ""));
+        let cookie = `${name}=${enc}; Path=/; SameSite=Lax`;
+        // If you're always on https (recommended), this is fine:
+        if (location.protocol === "https:") cookie += "; Secure";
+        if (typeof days === "number" && days > 0) {
+            cookie += `; Max-Age=${Math.floor(days * 86400)}`;
+        }
+        document.cookie = cookie;
+    }
 
-  function deleteCookie(name) {
-    // Expire immediately
-    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax` + (location.protocol === "https:" ? "; Secure" : "");
-  }
+    function getCookie(name) {
+        const m = document.cookie.match(new RegExp("(^|;\\s*)" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=([^;]*)"));
+        return m ? decodeURIComponent(m[2]) : "";
+    }
 
-  function getToken() {
-    const ls = localStorage.getItem(LS_TOKEN) || "";
-    if (ls) return ls;
-    // fallback
-    return getCookie(COOKIE_TOKEN) || "";
-  }
+    function deleteCookie(name) {
+        // Expire immediately
+        document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax` + (location.protocol === "https:" ? "; Secure" : "");
+    }
 
-  function getUser() {
-    // localStorage first
-    try {
-      const s = localStorage.getItem(LS_USER);
-      if (s) return JSON.parse(s);
-    } catch {}
-    // cookie fallback
-    try {
-      const c = getCookie(COOKIE_USER);
-      if (c) return JSON.parse(c);
-    } catch {}
-    return null;
-  }
+    function getToken() {
+        const ls = localStorage.getItem(LS_TOKEN) || "";
+        if (ls) return ls;
+        // fallback
+        return getCookie(COOKIE_TOKEN) || "";
+    }
 
-  function setSession(token, user, rememberDays) {
-    const t = String(token || "");
-    const u = user || null;
+    function getUser() {
+        // localStorage first
+        try {
+            const s = localStorage.getItem(LS_USER);
+            if (s) return JSON.parse(s);
+        } catch { }
+        // cookie fallback
+        try {
+            const c = getCookie(COOKIE_USER);
+            if (c) return JSON.parse(c);
+        } catch { }
+        return null;
+    }
 
-    localStorage.setItem(LS_TOKEN, t);
-    localStorage.setItem(LS_USER, JSON.stringify(u));
+    function setSession(token, user, rememberDays) {
+        const t = String(token || "");
+        const u = user || null;
 
-    // cookie fallback (important for refresh/session persistence issues)
-    setCookie(COOKIE_TOKEN, t, rememberDays);
-    setCookie(COOKIE_USER, JSON.stringify(u), rememberDays);
-  }
+        localStorage.setItem(LS_TOKEN, t);
+        localStorage.setItem(LS_USER, JSON.stringify(u));
 
-  function clearSession() {
-    localStorage.removeItem(LS_TOKEN);
-    localStorage.removeItem(LS_USER);
-    deleteCookie(COOKIE_TOKEN);
-    deleteCookie(COOKIE_USER);
-  }
+        // cookie fallback (important for refresh/session persistence issues)
+        setCookie(COOKIE_TOKEN, t, rememberDays);
+        setCookie(COOKIE_USER, JSON.stringify(u), rememberDays);
+    }
 
-  function logout() {
-    clearSession();
-    showAlert("Logged out.");
-  }
+    function clearSession() {
+        localStorage.removeItem(LS_TOKEN);
+        localStorage.removeItem(LS_USER);
+        deleteCookie(COOKIE_TOKEN);
+        deleteCookie(COOKIE_USER);
+    }
 
-  // ---------------- Simple modal UI ----------------
-  function ensureModalStyles() {
-    if (document.getElementById("ball10AuthModalStyle")) return;
-    const style = document.createElement("style");
-    style.id = "ball10AuthModalStyle";
-    style.textContent = `
+    function logout() {
+        clearSession();
+        showAlert("Logged out.");
+    }
+
+    // ---------------- Simple modal UI ----------------
+    function ensureModalStyles() {
+        if (document.getElementById("ball10AuthModalStyle")) return;
+        const style = document.createElement("style");
+        style.id = "ball10AuthModalStyle";
+        style.textContent = `
       .ball10-modal-backdrop{
         position:fixed; inset:0; background:rgba(0,0,0,.65);
         display:flex; align-items:center; justify-content:center;
@@ -125,168 +125,200 @@
       .ball10-checkbox{ display:flex; gap:8px; align-items:center; user-select:none; cursor:pointer; }
       .ball10-checkbox input{ width:auto; }
     `;
-    document.head.appendChild(style);
-  }
-
-  function openAuthModal(mode /* "login"|"register" */) {
-    ensureModalStyles();
-
-    return new Promise((resolve, reject) => {
-      const backdrop = document.createElement("div");
-      backdrop.className = "ball10-modal-backdrop";
-
-      const box = document.createElement("div");
-      box.className = "ball10-modal";
-
-      const title = document.createElement("h3");
-      title.textContent = mode === "register" ? "Create Account" : "Login";
-
-      const uField = document.createElement("div");
-      uField.className = "ball10-field";
-      const uLabel = document.createElement("label");
-      uLabel.textContent = "Username";
-      const uInput = document.createElement("input");
-      uInput.type = "text";
-      uInput.autocomplete = mode === "register" ? "username" : "username";
-      uInput.placeholder = "username";
-      uField.appendChild(uLabel);
-      uField.appendChild(uInput);
-
-      const pField = document.createElement("div");
-      pField.className = "ball10-field";
-      const pLabel = document.createElement("label");
-      pLabel.textContent = "Password";
-      const pInput = document.createElement("input");
-      pInput.type = "password";
-      pInput.autocomplete = mode === "register" ? "new-password" : "current-password";
-      pInput.placeholder = "password";
-      pField.appendChild(pLabel);
-      pField.appendChild(pInput);
-
-      const row = document.createElement("div");
-      row.className = "ball10-row";
-
-      const rememberWrap = document.createElement("label");
-      rememberWrap.className = "ball10-checkbox";
-      const remember = document.createElement("input");
-      remember.type = "checkbox";
-      remember.checked = true; // default on
-      const rememberTxt = document.createElement("span");
-      rememberTxt.className = "ball10-small";
-      rememberTxt.textContent = "Remember me";
-      rememberWrap.appendChild(remember);
-      rememberWrap.appendChild(rememberTxt);
-
-      const hint = document.createElement("div");
-      hint.className = "ball10-small";
-      hint.textContent = mode === "register"
-        ? "Password must match your server rules."
-        : "Session will be restored after refresh.";
-
-      row.appendChild(rememberWrap);
-      row.appendChild(hint);
-
-      const actions = document.createElement("div");
-      actions.className = "ball10-actions";
-
-      const cancelBtn = document.createElement("button");
-      cancelBtn.className = "ball10-btn";
-      cancelBtn.textContent = "Cancel";
-
-      const okBtn = document.createElement("button");
-      okBtn.className = "ball10-btn primary";
-      okBtn.textContent = mode === "register" ? "Register" : "Login";
-
-      actions.appendChild(cancelBtn);
-      actions.appendChild(okBtn);
-
-      box.appendChild(title);
-      box.appendChild(uField);
-      box.appendChild(pField);
-      box.appendChild(row);
-      box.appendChild(actions);
-      backdrop.appendChild(box);
-      document.body.appendChild(backdrop);
-
-      function cleanup() {
-        backdrop.remove();
-      }
-
-      function submit() {
-        const username = String(uInput.value || "").trim();
-        const password = String(pInput.value || "");
-        const rememberMe = !!remember.checked;
-
-        if (!username || !password) {
-          showAlert("Username + password required.", true);
-          return;
-        }
-        cleanup();
-        resolve({ username, password, rememberMe });
-      }
-
-      cancelBtn.onclick = () => { cleanup(); reject(new Error("Cancelled")); };
-      okBtn.onclick = submit;
-
-      backdrop.addEventListener("click", (e) => {
-        if (e.target === backdrop) { cleanup(); reject(new Error("Cancelled")); }
-      });
-
-      // Enter key
-      pInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") submit();
-      });
-
-      // focus
-      setTimeout(() => uInput.focus(), 0);
-    });
-  }
-
-  // ---------------- API flows ----------------
-  async function restoreFromDb() {
-    // If localStorage was cleared, restore from cookie automatically
-    const token = getToken();
-    if (!token) return null;
-
-    const data = await window.Ball10API.me(token);
-    if (data?.user) {
-      // Keep same remember duration as cookie currently has (best effort)
-      const hasCookie = !!getCookie(COOKIE_TOKEN);
-      setSession(token, data.user, hasCookie ? 30 : null);
-      return data.user;
+        document.head.appendChild(style);
     }
-    return null;
-  }
 
-  async function promptLogin() {
-    const { username, password, rememberMe } = await openAuthModal("login");
-    const data = await window.Ball10API.login(username, password);
+    function openAuthModal(initialMode /* "login"|"register" */) {
+        ensureModalStyles();
 
-    // Remember: 30 days if checked, else session cookie
-    setSession(data.token, data.user, rememberMe ? 30 : null);
+        return new Promise((resolve, reject) => {
+            let mode = initialMode;
 
-    showAlert(`Welcome ${data.user.username} ✅`);
-    return data.user;
-  }
+            const backdrop = document.createElement("div");
+            backdrop.className = "ball10-modal-backdrop";
 
-  async function promptRegister() {
-    const { username, password, rememberMe } = await openAuthModal("register");
-    await window.Ball10API.register(username, password);
+            const box = document.createElement("div");
+            box.className = "ball10-modal";
 
-    // After register, user still needs to login (your design)
-    // But we can keep remember choice for later by storing nothing (no token yet).
-    showAlert("Registered ✅ Now login.");
-    return { rememberMe };
-  }
+            const title = document.createElement("h3");
+            const uField = document.createElement("div");
+            uField.className = "ball10-field";
+            const uLabel = document.createElement("label");
+            uLabel.textContent = "Username";
+            const uInput = document.createElement("input");
+            uInput.type = "text";
+            uInput.placeholder = "username";
+            uField.appendChild(uLabel);
+            uField.appendChild(uInput);
 
-  window.Ball10Auth = {
-    showAlert,
-    getToken,
-    getUser,
-    setSession,
-    logout,
-    restoreFromDb,
-    promptLogin,
-    promptRegister,
-  };
+            const pField = document.createElement("div");
+            pField.className = "ball10-field";
+            const pLabel = document.createElement("label");
+            pLabel.textContent = "Password";
+            const pInput = document.createElement("input");
+            pInput.type = "password";
+            pInput.placeholder = "password";
+            pField.appendChild(pLabel);
+            pField.appendChild(pInput);
+
+            const row = document.createElement("div");
+            row.className = "ball10-row";
+
+            const rememberWrap = document.createElement("label");
+            rememberWrap.className = "ball10-checkbox";
+            const remember = document.createElement("input");
+            remember.type = "checkbox";
+            remember.checked = true;
+            const rememberTxt = document.createElement("span");
+            rememberTxt.className = "ball10-small";
+            rememberTxt.textContent = "Remember me";
+            rememberWrap.appendChild(remember);
+            rememberWrap.appendChild(rememberTxt);
+
+            const switchBtn = document.createElement("div");
+            switchBtn.className = "ball10-small";
+            switchBtn.style.cursor = "pointer";
+            switchBtn.style.textDecoration = "underline";
+            switchBtn.style.color = "#14C993";
+
+            row.appendChild(rememberWrap);
+            row.appendChild(switchBtn);
+
+            const actions = document.createElement("div");
+            actions.className = "ball10-actions";
+
+            const cancelBtn = document.createElement("button");
+            cancelBtn.className = "ball10-btn";
+            cancelBtn.textContent = "Cancel";
+
+            const okBtn = document.createElement("button");
+            okBtn.className = "ball10-btn primary";
+
+            actions.appendChild(cancelBtn);
+            actions.appendChild(okBtn);
+
+            box.appendChild(title);
+            box.appendChild(uField);
+            box.appendChild(pField);
+            box.appendChild(row);
+            box.appendChild(actions);
+            backdrop.appendChild(box);
+            document.body.appendChild(backdrop);
+
+            function updateUI() {
+                title.textContent = mode === "register" ? "Create Account" : "Login";
+                okBtn.textContent = mode === "register" ? "Register" : "Login";
+                switchBtn.textContent = mode === "register" ? "Already have account? Login" : "No account? Register";
+                uInput.autocomplete = mode === "register" ? "username" : "username";
+                pInput.autocomplete = mode === "register" ? "new-password" : "current-password";
+            }
+
+            updateUI();
+
+            function cleanup() {
+                backdrop.remove();
+            }
+
+            async function submit() {
+                const username = String(uInput.value || "").trim();
+                const password = String(pInput.value || "");
+                const rememberMe = !!remember.checked;
+
+                if (!username || !password) {
+                    showAlert("Username and password are required.", true);
+                    return;
+                }
+
+                // Disable UI during attempt
+                okBtn.disabled = true;
+                okBtn.style.opacity = "0.5";
+                okBtn.textContent = "...";
+
+                try {
+                    let result;
+                    if (mode === "login") {
+                        const data = await window.Ball10API.login(username, password);
+                        setSession(data.token, data.user, rememberMe ? 30 : null);
+                        showAlert(`Welcome ${data.user.username} ✅`);
+                        result = data.user;
+                    } else {
+                        await window.Ball10API.register(username, password);
+                        showAlert("Registered ✅ Now login.");
+                        mode = "login";
+                        updateUI();
+                        okBtn.disabled = false;
+                        okBtn.style.opacity = "1";
+                        pInput.value = ""; // clear password for login after register
+                        return; // Stay in modal to allow login
+                    }
+                    cleanup();
+                    resolve(result);
+                } catch (e) {
+                    showAlert(e.message || "Action failed", true);
+                    okBtn.disabled = false;
+                    okBtn.style.opacity = "1";
+                    okBtn.textContent = mode === "register" ? "Register" : "Login";
+                }
+            }
+
+            switchBtn.onclick = (e) => {
+                e.stopPropagation();
+                mode = (mode === "login" ? "register" : "login");
+                updateUI();
+            };
+
+            cancelBtn.onclick = () => { cleanup(); reject(new Error("Cancelled")); };
+            okBtn.onclick = submit;
+
+            backdrop.onclick = (e) => {
+                if (e.target === backdrop) { cleanup(); reject(new Error("Cancelled")); }
+            };
+
+            // Stop propagation inside box so clicks don't trigger backdrop close
+            box.onclick = (e) => e.stopPropagation();
+
+            const inputs = [uInput, pInput];
+            inputs.forEach(inp => {
+                inp.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") submit();
+                });
+            });
+
+            setTimeout(() => uInput.focus(), 0);
+        });
+    }
+
+    // ---------------- API flows ----------------
+    async function restoreFromDb() {
+        const token = getToken();
+        if (!token) return null;
+        try {
+            const data = await window.Ball10API.me(token);
+            if (data?.user) {
+                const hasCookie = !!getCookie(COOKIE_TOKEN);
+                setSession(token, data.user, hasCookie ? 30 : null);
+                return data.user;
+            }
+        } catch (e) { }
+        return null;
+    }
+
+    async function promptLogin() {
+        return await openAuthModal("login");
+    }
+
+    async function promptRegister() {
+        return await openAuthModal("register");
+    }
+
+    window.Ball10Auth = {
+        showAlert,
+        getToken,
+        getUser,
+        setSession,
+        logout,
+        restoreFromDb,
+        promptLogin,
+        promptRegister,
+    };
 })();
