@@ -4,6 +4,10 @@
     const COOKIE_TOKEN = "ball10_token";
     const COOKIE_USER = "ball10_user";
 
+    // ✅ Prevent multiple modals opening at the same time
+    let __ball10_modal_open = false;
+    let __ball10_modal_promise = null;
+
     function showAlert(msg, isError = false) {
         const el = document.getElementById("appAlert");
         if (!el) return;
@@ -131,9 +135,13 @@
     }
 
     function openAuthModal(initialMode /* "login"|"register"|"change" */) {
-        ensureModalStyles();
+        // ✅ If a modal is already open, return the same promise (prevents duplicates)
+        if (__ball10_modal_open && __ball10_modal_promise) return __ball10_modal_promise;
 
-        return new Promise((resolve, reject) => {
+        ensureModalStyles();
+        __ball10_modal_open = true;
+
+        __ball10_modal_promise = new Promise((resolve, reject) => {
             let mode = initialMode;
 
             const backdrop = document.createElement("div");
@@ -245,6 +253,9 @@
 
             function cleanup() {
                 backdrop.remove();
+                // ✅ release modal lock
+                __ball10_modal_open = false;
+                __ball10_modal_promise = null;
             }
 
             async function submit() {
@@ -328,6 +339,8 @@
 
             setTimeout(() => (mode === "change" ? pInput : uInput).focus(), 0);
         });
+
+        return __ball10_modal_promise;
     }
 
     // ---------------- API flows ----------------
